@@ -28,7 +28,7 @@ export default function RentVsMortgageCalculator() {
     rentIncreaseRate: 3,
     movingFrequency: 3,
     movingCost: 2000,
-    contentsInsurance: 400,
+    contentsInsurance: 1200,
   });
 
   const [investmentInputs, setInvestmentInputs] = useState<InvestmentInputs>({

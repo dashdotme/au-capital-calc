@@ -59,7 +59,7 @@ export default function InvestmentInputsCard({
           <option value="45">45% ($190,001+)</option>
         </select>
         <span className="text-xs mt-1 block text-[var(--color-text-secondary)] opacity-70">
-          50% CGT discount applied automatically for assets held 12+ months
+          Calculator assumes assets are held for 12 months, meaning capital is taxed at 50% of this rate.
         </span>
       </label>
 
