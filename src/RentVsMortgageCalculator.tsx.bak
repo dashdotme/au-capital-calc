@@ -1,0 +1,701 @@
+import React, { useState, useMemo } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Data structures for the calculation engine
+interface PropertyInputs {
+  propertyPrice: number;
+  deposit: number;
+  loanTerm: number;
+  interestRate: number;
+  stampDuty: number;
+  otherPurchaseCosts: number;
+  maintenanceRate: number;
+  councilRates: number;
+  buildingInsurance: number;
+  contentsInsurance: number;
+  sellingCostRate: number;
+  capitalGainsTaxRate: number;
+}
+
+interface RentInputs {
+  monthlyRent: number;
+  rentIncreaseRate: number;
+  movingFrequency: number;
+  movingCost: number;
+  contentsInsurance: number;
+}
+
+interface InvestmentInputs {
+  stockMarketReturn: number;
+  propertyGrowthRate: number;
+  capitalGainsTaxRateStocks: number;
+}
+
+interface YearlySnapshot {
+  year: number;
+  mortgageEquity: number;
+  mortgageTotalPaid: number;
+  mortgagePropertyValue: number;
+  mortgageNetPosition: number;
+  mortgageNetPositionAfterSale: number;
+  mortgageMaintenance: number;
+  mortgageRates: number;
+  mortgageInsurance: number;
+  rentTotalPaid: number;
+  rentMovingCosts: number;
+  rentInsurance: number;
+  rentInvestmentValue: number;
+  rentNetPosition: number;
+  rentNetPositionAfterTax: number;
+}
+
+// Calculation functions
+function calculateMortgagePayment(principal: number, annualRate: number, years: number): number {
+  const monthlyRate = annualRate / 100 / 12;
+  const numPayments = years * 12;
+  return principal * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) /
+    (Math.pow(1 + monthlyRate, numPayments) - 1);
+}
+
+function calculateAmortization(
+  principal: number,
+  annualRate: number,
+  years: number,
+  monthlyPayment: number
+): { balance: number; totalPaid: number; equity: number }[] {
+  const monthlyRate = annualRate / 100 / 12;
+  let balance = principal;
+  let totalPaid = 0;
+  const schedule = [];
+
+  for (let month = 0; month <= years * 12; month++) {
+    if (month > 0) {
+      const interestPayment = balance * monthlyRate;
+      const principalPayment = monthlyPayment - interestPayment;
+      balance = Math.max(0, balance - principalPayment);
+      totalPaid += monthlyPayment;
+    }
+
+    if (month % 12 === 0) {
+      schedule.push({
+        balance,
+        totalPaid,
+        equity: principal - balance
+      });
+    }
+  }
+
+  return schedule;
+}
+
+function runComparison(
+  propertyInputs: PropertyInputs,
+  rentInputs: RentInputs,
+  investmentInputs: InvestmentInputs,
+  years: number
+): YearlySnapshot[] {
+  const loanAmount = propertyInputs.propertyPrice - propertyInputs.deposit;
+  const monthlyMortgage = calculateMortgagePayment(
+    loanAmount,
+    propertyInputs.interestRate,
+    propertyInputs.loanTerm
+  );
+
+  const amortization = calculateAmortization(
+    loanAmount,
+    propertyInputs.interestRate,
+    propertyInputs.loanTerm,
+    monthlyMortgage
+  );
+
+  const upfrontCosts = propertyInputs.stampDuty + propertyInputs.otherPurchaseCosts;
+  const initialCapital = propertyInputs.deposit + upfrontCosts;
+
+  const results: YearlySnapshot[] = [];
+
+  let rentInvestment = initialCapital;
+  let cumulativeRent = 0;
+  let currentRent = rentInputs.monthlyRent;
+  let cumulativeMaintenance = 0;
+  let cumulativeRates = 0;
+  let cumulativeMovingCosts = 0;
+  let cumulativeOwnerInsurance = 0;
+  let cumulativeRenterInsurance = 0;
+
+  for (let year = 0; year <= years; year++) {
+    const propertyValue = propertyInputs.propertyPrice *
+      Math.pow(1 + investmentInputs.propertyGrowthRate / 100, year);
+
+    const mortgageData = amortization[year];
+
+    const annualMaintenance = propertyValue * (propertyInputs.maintenanceRate / 100);
+
+    const annualRates = year === 0 ? propertyInputs.councilRates :
+      propertyInputs.councilRates * Math.pow(1 + investmentInputs.propertyGrowthRate / 100, year);
+
+    const annualBuildingInsurance = year === 0 ? propertyInputs.buildingInsurance :
+      propertyInputs.buildingInsurance * Math.pow(1 + investmentInputs.propertyGrowthRate / 100, year);
+
+    const annualOwnerContentsInsurance = year === 0 ? propertyInputs.contentsInsurance :
+      propertyInputs.contentsInsurance * Math.pow(1 + investmentInputs.propertyGrowthRate / 100, year);
+
+    const annualRenterInsurance = year === 0 ? rentInputs.contentsInsurance :
+      rentInputs.contentsInsurance * Math.pow(1 + investmentInputs.propertyGrowthRate / 100, year);
+
+    if (year > 0) {
+      cumulativeMaintenance += annualMaintenance;
+      cumulativeRates += annualRates;
+      cumulativeOwnerInsurance += annualBuildingInsurance + annualOwnerContentsInsurance;
+      cumulativeRenterInsurance += annualRenterInsurance;
+
+      if (year % rentInputs.movingFrequency === 0) {
+        cumulativeMovingCosts += rentInputs.movingCost;
+      }
+    }
+
+    const totalOwnershipCosts = upfrontCosts + mortgageData.totalPaid + cumulativeMaintenance + cumulativeRates + cumulativeOwnerInsurance;
+    const mortgageNetPosition = propertyValue - mortgageData.balance - totalOwnershipCosts;
+
+    const sellingCosts = propertyValue * (propertyInputs.sellingCostRate / 100);
+    const capitalGain = propertyValue - propertyInputs.propertyPrice;
+    const capitalGainsTax = capitalGain > 0 ? capitalGain * (propertyInputs.capitalGainsTaxRate / 100) : 0;
+    const mortgageNetPositionAfterSale = propertyValue - mortgageData.balance - totalOwnershipCosts - sellingCosts - capitalGainsTax;
+
+    if (year > 0) {
+      const monthlyOwnershipCost = monthlyMortgage +
+        (annualMaintenance / 12) +
+        (annualRates / 12) +
+        (annualBuildingInsurance / 12) +
+        (annualOwnerContentsInsurance / 12);
+
+      const monthlyRenterCosts = currentRent + (annualRenterInsurance / 12);
+      const monthlySavings = monthlyOwnershipCost - monthlyRenterCosts;
+      const yearlyInvestment = monthlySavings * 12;
+
+      rentInvestment = rentInvestment * (1 + investmentInputs.stockMarketReturn / 100);
+      rentInvestment += yearlyInvestment;
+      cumulativeRent += currentRent * 12;
+      currentRent = currentRent * (1 + rentInputs.rentIncreaseRate / 100);
+    }
+
+    const rentNetPosition = rentInvestment - cumulativeRent - cumulativeMovingCosts - cumulativeRenterInsurance;
+    const stocksCapitalGain = rentInvestment - initialCapital;
+    const stocksCapitalGainsTax = stocksCapitalGain > 0 ? stocksCapitalGain * (investmentInputs.capitalGainsTaxRateStocks / 100) : 0;
+    const rentNetPositionAfterTax = rentNetPosition - stocksCapitalGainsTax;
+
+    results.push({
+      year,
+      mortgageEquity: mortgageData.equity,
+      mortgageTotalPaid: mortgageData.totalPaid + upfrontCosts,
+      mortgagePropertyValue: propertyValue,
+      mortgageNetPosition,
+      mortgageNetPositionAfterSale,
+      mortgageMaintenance: cumulativeMaintenance,
+      mortgageRates: cumulativeRates,
+      mortgageInsurance: cumulativeOwnerInsurance,
+      rentTotalPaid: cumulativeRent,
+      rentMovingCosts: cumulativeMovingCosts,
+      rentInsurance: cumulativeRenterInsurance,
+      rentInvestmentValue: rentInvestment,
+      rentNetPosition,
+      rentNetPositionAfterTax
+    });
+  }
+
+  return results;
+}
+
+export default function RentVsMortgageCalculator() {
+  const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>({
+    propertyPrice: 800000,
+    deposit: 160000,
+    loanTerm: 30,
+    interestRate: 6.5,
+    stampDuty: 32000,
+    otherPurchaseCosts: 8000,
+    maintenanceRate: 1.0,
+    councilRates: 2500,
+    buildingInsurance: 1200,
+    contentsInsurance: 500,
+    sellingCostRate: 3.0,
+    capitalGainsTaxRate: 0
+  });
+
+  const [rentInputs, setRentInputs] = useState<RentInputs>({
+    monthlyRent: 2800,
+    rentIncreaseRate: 3.5,
+    movingFrequency: 3,
+    movingCost: 2000,
+    contentsInsurance: 400
+  });
+
+  const [investmentInputs, setInvestmentInputs] = useState<InvestmentInputs>({
+    stockMarketReturn: 8.5,
+    propertyGrowthRate: 5.0,
+    capitalGainsTaxRateStocks: 23.5
+  });
+
+  const [timeHorizon, setTimeHorizon] = useState(30);
+
+  const results = useMemo(() =>
+    runComparison(propertyInputs, rentInputs, investmentInputs, timeHorizon),
+    [propertyInputs, rentInputs, investmentInputs, timeHorizon]
+  );
+
+  const loanAmount = propertyInputs.propertyPrice - propertyInputs.deposit;
+  const monthlyMortgage = calculateMortgagePayment(
+    loanAmount,
+    propertyInputs.interestRate,
+    propertyInputs.loanTerm
+  );
+
+  const finalResult = results[results.length - 1];
+  const advantageBeforeTax = finalResult.rentNetPosition - finalResult.mortgageNetPosition;
+  const advantageAfterTax = finalResult.rentNetPositionAfterTax - finalResult.mortgageNetPositionAfterSale;
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto min-h-screen" style={{ background: 'var(--bg-primary)' }}>
+      <h1 className="text-4xl font-bold mb-8" style={{ color: 'var(--accent-yellow)' }}>
+        Rent vs Mortgage Calculator
+      </h1>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Property Purchase Card */}
+        <div className="p-6 rounded-lg shadow-xl" style={{ background: 'var(--bg-card)', borderLeft: '4px solid var(--accent-yellow)' }}>
+          <h2 className="text-xl font-semibold mb-6" style={{ color: 'var(--accent-yellow)' }}>
+            Property Purchase
+          </h2>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Property Price</span>
+            <input
+              type="number"
+              value={propertyInputs.propertyPrice}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, propertyPrice: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Deposit</span>
+            <input
+              type="number"
+              value={propertyInputs.deposit}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, deposit: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Interest Rate (%)</span>
+            <input
+              type="number"
+              step="0.1"
+              value={propertyInputs.interestRate}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, interestRate: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Loan Term (years)</span>
+            <input
+              type="number"
+              value={propertyInputs.loanTerm}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, loanTerm: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Stamp Duty</span>
+            <input
+              type="number"
+              value={propertyInputs.stampDuty}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, stampDuty: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Other Costs</span>
+            <input
+              type="number"
+              value={propertyInputs.otherPurchaseCosts}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, otherPurchaseCosts: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+            <span className="text-xs mt-1 block" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+              Conveyancing, inspections, etc.
+            </span>
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Maintenance Rate (% p.a.)</span>
+            <input
+              type="number"
+              step="0.1"
+              value={propertyInputs.maintenanceRate}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, maintenanceRate: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Council Rates (annual)</span>
+            <input
+              type="number"
+              value={propertyInputs.councilRates}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, councilRates: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Building Insurance (annual)</span>
+            <input
+              type="number"
+              value={propertyInputs.buildingInsurance}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, buildingInsurance: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Contents Insurance (annual)</span>
+            <input
+              type="number"
+              value={propertyInputs.contentsInsurance}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, contentsInsurance: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Selling Costs (%)</span>
+            <input
+              type="number"
+              step="0.1"
+              value={propertyInputs.sellingCostRate}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, sellingCostRate: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+            <span className="text-xs mt-1 block" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+              Agent fees, marketing, legal
+            </span>
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>CGT Rate on Property (%)</span>
+            <input
+              type="number"
+              step="0.1"
+              value={propertyInputs.capitalGainsTaxRate}
+              onChange={(e) => setPropertyInputs({ ...propertyInputs, capitalGainsTaxRate: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+            <span className="text-xs mt-1 block" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+              0% for primary residence (AU)
+            </span>
+          </label>
+
+          <div className="mt-6 pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Monthly Payment: <strong className="text-2xl ml-2" style={{ color: 'var(--accent-yellow)' }}>
+                ${monthlyMortgage.toFixed(0)}
+              </strong>
+            </p>
+            <p className="text-xs mt-2" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+              + Maintenance, Rates & Insurance
+            </p>
+          </div>
+        </div>
+
+        {/* Renting Card */}
+        <div className="p-6 rounded-lg shadow-xl" style={{ background: 'var(--bg-card)', borderLeft: '4px solid var(--accent-yellow)' }}>
+          <h2 className="text-xl font-semibold mb-6" style={{ color: 'var(--accent-yellow)' }}>
+            Renting
+          </h2>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Monthly Rent</span>
+            <input
+              type="number"
+              value={rentInputs.monthlyRent}
+              onChange={(e) => setRentInputs({ ...rentInputs, monthlyRent: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Annual Rent Increase (%)</span>
+            <input
+              type="number"
+              step="0.1"
+              value={rentInputs.rentIncreaseRate}
+              onChange={(e) => setRentInputs({ ...rentInputs, rentIncreaseRate: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Move Every (years)</span>
+            <input
+              type="number"
+              min="1"
+              value={rentInputs.movingFrequency}
+              onChange={(e) => setRentInputs({ ...rentInputs, movingFrequency: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Cost Per Move</span>
+            <input
+              type="number"
+              value={rentInputs.movingCost}
+              onChange={(e) => setRentInputs({ ...rentInputs, movingCost: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+            <span className="text-xs mt-1 block" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+              Bond, removalists, cleaning
+            </span>
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Contents Insurance (annual)</span>
+            <input
+              type="number"
+              value={rentInputs.contentsInsurance}
+              onChange={(e) => setRentInputs({ ...rentInputs, contentsInsurance: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <div className="mt-6 pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Monthly Savings vs Mortgage:</p>
+            <p className="text-2xl font-semibold mt-1" style={{ color: 'var(--accent-yellow)' }}>
+              ${(monthlyMortgage - rentInputs.monthlyRent).toFixed(0)}
+            </p>
+            <p className="text-xs mt-2" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+              Invested in stock market each month
+            </p>
+          </div>
+        </div>
+
+        {/* Investment Returns Card */}
+        <div className="p-6 rounded-lg shadow-xl" style={{ background: 'var(--bg-card)', borderLeft: '4px solid var(--accent-yellow)' }}>
+          <h2 className="text-xl font-semibold mb-6" style={{ color: 'var(--accent-yellow)' }}>
+            Investment Returns
+          </h2>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Stock Market Return (% p.a.)</span>
+            <input
+              type="number"
+              step="0.1"
+              value={investmentInputs.stockMarketReturn}
+              onChange={(e) => setInvestmentInputs({ ...investmentInputs, stockMarketReturn: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Property Growth Rate (% p.a.)</span>
+            <input
+              type="number"
+              step="0.1"
+              value={investmentInputs.propertyGrowthRate}
+              onChange={(e) => setInvestmentInputs({ ...investmentInputs, propertyGrowthRate: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>CGT Rate on Stocks (%)</span>
+            <input
+              type="number"
+              step="0.1"
+              value={investmentInputs.capitalGainsTaxRateStocks}
+              onChange={(e) => setInvestmentInputs({ ...investmentInputs, capitalGainsTaxRateStocks: Number(e.target.value) })}
+              className="block w-full rounded p-2.5"
+            />
+            <span className="text-xs mt-1 block" style={{ color: 'var(--text-secondary)', opacity: 0.7 }}>
+              After 50% CGT discount (AU)
+            </span>
+          </label>
+
+          <label className="block mb-4">
+            <span className="text-sm block mb-1" style={{ color: 'var(--text-secondary)' }}>Time Horizon (years)</span>
+            <input
+              type="number"
+              value={timeHorizon}
+              onChange={(e) => setTimeHorizon(Number(e.target.value))}
+              className="block w-full rounded p-2.5"
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* Results Summary */}
+      <div className="p-6 rounded-lg shadow-xl mb-6" style={{ background: 'var(--bg-card)' }}>
+        <h2 className="text-2xl font-semibold mb-6" style={{ color: 'var(--accent-yellow)' }}>
+          After {timeHorizon} Years
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+          <div className="pr-6" style={{ borderRight: '1px solid var(--border-color)' }}>
+            <h3 className="font-semibold text-lg mb-4" style={{ color: 'var(--accent-yellow)' }}>
+              Buying (Mortgage)
+            </h3>
+            <div className="space-y-2">
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Property Value: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.mortgagePropertyValue.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Equity Built: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.mortgageEquity.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Mortgage Paid: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.mortgageTotalPaid.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Maintenance: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.mortgageMaintenance.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Council Rates: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.mortgageRates.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Insurance: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.mortgageInsurance.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+            </div>
+            <p className="text-lg font-bold mt-4" style={{ color: 'var(--text-primary)' }}>
+              Net (holding): ${finalResult.mortgageNetPosition.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+            </p>
+            <p className="text-xl font-bold mt-2" style={{ color: 'var(--accent-yellow)' }}>
+              Net (after sale): ${finalResult.mortgageNetPositionAfterSale.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-lg mb-4" style={{ color: 'var(--accent-yellow)' }}>
+              Renting + Investing
+            </h3>
+            <div className="space-y-2">
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Investment Value: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.rentInvestmentValue.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Total Rent Paid: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.rentTotalPaid.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Moving Costs: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.rentMovingCosts.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Insurance: <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  ${finalResult.rentInsurance.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+            </div>
+            <p className="text-lg font-bold mt-4" style={{ color: 'var(--text-primary)' }}>
+              Net (before tax): ${finalResult.rentNetPosition.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+            </p>
+            <p className="text-xl font-bold mt-2" style={{ color: 'var(--accent-yellow)' }}>
+              Net (after CGT): ${finalResult.rentNetPositionAfterTax.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+            </p>
+          </div>
+        </div>
+
+        <div className="pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
+          <h3 className="font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>
+            Comparison (After All Exit Costs & Taxes)
+          </h3>
+          <p className="text-2xl font-bold">
+            {advantageAfterTax > 0 ? (
+              <span style={{ color: 'var(--accent-yellow)' }}>
+                Renting + Investing is ahead by ${Math.abs(advantageAfterTax).toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+              </span>
+            ) : (
+              <span style={{ color: 'var(--accent-yellow)' }}>
+                Buying is ahead by ${Math.abs(advantageAfterTax).toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+              </span>
+            )}
+          </p>
+          <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>
+            Before tax & exit costs: {advantageBeforeTax > 0 ? (
+              <span>Renting ahead by ${Math.abs(advantageBeforeTax).toLocaleString('en-AU', { maximumFractionDigits: 0 })}</span>
+            ) : (
+              <span>Buying ahead by ${Math.abs(advantageBeforeTax).toLocaleString('en-AU', { maximumFractionDigits: 0 })}</span>
+            )}
+          </p>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="p-6 rounded-lg shadow-xl" style={{ background: 'var(--bg-card)' }}>
+        <h2 className="text-2xl font-semibold mb-6" style={{ color: 'var(--accent-yellow)' }}>
+          Net Position Over Time
+        </h2>
+        <ResponsiveContainer width="100%" height={400}>
+          <LineChart data={results}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+            <XAxis
+              dataKey="year"
+              stroke="var(--text-secondary)"
+              label={{ value: 'Years', position: 'insideBottom', offset: -5, fill: 'var(--text-secondary)' }}
+            />
+            <YAxis
+              stroke="var(--text-secondary)"
+              label={{ value: 'Net Position ($)', angle: -90, position: 'insideLeft', fill: 'var(--text-secondary)' }}
+            />
+            <Tooltip
+              contentStyle={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                color: 'var(--text-primary)'
+              }}
+              formatter={(value: number) => `$${value.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`}
+            />
+            <Legend
+              wrapperStyle={{ color: 'var(--text-primary)' }}
+            />
+            <Line
+              type="monotone"
+              dataKey="mortgageNetPositionAfterSale"
+              stroke="#60a5fa"
+              name="Buy (After Sale)"
+              strokeWidth={3}
+              dot={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="rentNetPositionAfterTax"
+              stroke="var(--accent-yellow)"
+              name="Rent + Invest (After CGT)"
+              strokeWidth={3}
+              dot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
