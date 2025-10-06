@@ -13,7 +13,11 @@ export default function RentVsMortgageCalculator() {
     propertyPrice: 900000,
     deposit: 180000,
     loanTerm: 30,
-    interestRate: 4.5,
+    interestRate: {
+      pessimistic: 6.5,
+      baseline: 4.5,
+      optimistic: 3.5,
+    },
     stampDuty: 0,
     otherPurchaseCosts: 10000,
     maintenanceRate: 1.0,
@@ -27,15 +31,27 @@ export default function RentVsMortgageCalculator() {
 
   const [rentInputs, setRentInputs] = useState<RentInputs>({
     monthlyRent: 3000,
-    rentIncreaseRate: 3,
+    rentIncreaseRate: {
+      pessimistic: 5,
+      baseline: 3,
+      optimistic: 2,
+    },
     movingFrequency: 3,
     movingCost: 2000,
     contentsInsurance: 1200,
   });
 
   const [investmentInputs, setInvestmentInputs] = useState<InvestmentInputs>({
-    stockMarketReturn: 8,
-    propertyGrowthRate: 4.5,
+    stockMarketReturn: {
+      pessimistic: 6,
+      baseline: 8,
+      optimistic: 10,
+    },
+    propertyGrowthRate: {
+      pessimistic: 3,
+      baseline: 4.5,
+      optimistic: 6,
+    },
     marginalTaxRate: 37,
     inflationRate: 2.5,
     stockTransactionCost: 0.1,
@@ -45,7 +61,7 @@ export default function RentVsMortgageCalculator() {
   });
 
   const [timeHorizon, setTimeHorizon] = useState(30);
-  const [scenarioMode, setScenarioMode] = useState(false);
+  const [scenarioMode, setScenarioMode] = useState(true);
 
   const hasScenarioValues = useMemo(() => {
     return (
