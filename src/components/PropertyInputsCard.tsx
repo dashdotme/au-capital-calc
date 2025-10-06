@@ -1,17 +1,25 @@
-import type { PropertyInputs } from '../types';
+import type { PropertyInputs, ScenarioValue } from '../types';
 import InputField from './InputField';
+import MultiInput from './MultiInput';
+import { isScenarioValue } from '../utils/calculations';
 
 interface PropertyInputsCardProps {
   inputs: PropertyInputs;
   onChange: (inputs: PropertyInputs) => void;
   monthlyPayment: number;
+  scenarioMode: boolean;
 }
 
 export default function PropertyInputsCard({
   inputs,
   onChange,
   monthlyPayment,
+  scenarioMode,
 }: PropertyInputsCardProps) {
+  const handleInterestRateChange = (value: number | ScenarioValue) => {
+    onChange({ ...inputs, interestRate: value });
+  };
+
   return (
     <div className="p-6 rounded-lg shadow-xl bg-card border-l-4 border-accent">
       <h2 className="text-xl font-semibold mb-6 text-accent">Property Purchase</h2>
@@ -28,11 +36,23 @@ export default function PropertyInputsCard({
         onChange={(deposit) => onChange({ ...inputs, deposit })}
       />
 
-      <InputField
-        label="Interest Rate (%)"
-        value={inputs.interestRate}
-        onChange={(interestRate) => onChange({ ...inputs, interestRate })}
-      />
+      {scenarioMode ? (
+        <MultiInput
+          label="Interest Rate (%)"
+          value={
+            isScenarioValue(inputs.interestRate)
+              ? inputs.interestRate
+              : { pessimistic: inputs.interestRate, baseline: inputs.interestRate, optimistic: inputs.interestRate }
+          }
+          onChange={handleInterestRateChange}
+        />
+      ) : (
+        <InputField
+          label="Interest Rate (%)"
+          value={isScenarioValue(inputs.interestRate) ? inputs.interestRate.baseline : inputs.interestRate}
+          onChange={(interestRate) => onChange({ ...inputs, interestRate })}
+        />
+      )}
 
       <InputField
         label="Loan Term (years)"

@@ -1,11 +1,14 @@
-import type { InvestmentInputs } from '../types';
+import type { InvestmentInputs, ScenarioValue } from '../types';
 import InputField from './InputField';
+import MultiInput from './MultiInput';
+import { isScenarioValue } from '../utils/calculations';
 
 interface InvestmentInputsCardProps {
   inputs: InvestmentInputs;
   onChange: (inputs: InvestmentInputs) => void;
   timeHorizon: number;
   onTimeHorizonChange: (years: number) => void;
+  scenarioMode: boolean;
 }
 
 export default function InvestmentInputsCard({
@@ -13,16 +16,37 @@ export default function InvestmentInputsCard({
   onChange,
   timeHorizon,
   onTimeHorizonChange,
+  scenarioMode,
 }: InvestmentInputsCardProps) {
+  const handleStockMarketReturnChange = (value: number | ScenarioValue) => {
+    onChange({ ...inputs, stockMarketReturn: value });
+  };
+
+  const handlePropertyGrowthRateChange = (value: number | ScenarioValue) => {
+    onChange({ ...inputs, propertyGrowthRate: value });
+  };
+
   return (
     <div className="p-6 rounded-lg shadow-xl bg-card border-l-4 border-accent">
       <h2 className="text-xl font-semibold mb-6 text-accent">Investment Returns</h2>
 
-      <InputField
-        label="Stock Market Return (% p.a.)"
-        value={inputs.stockMarketReturn}
-        onChange={(stockMarketReturn) => onChange({ ...inputs, stockMarketReturn })}
-      />
+      {scenarioMode ? (
+        <MultiInput
+          label="Stock Market Return (% p.a.)"
+          value={
+            isScenarioValue(inputs.stockMarketReturn)
+              ? inputs.stockMarketReturn
+              : { pessimistic: inputs.stockMarketReturn, baseline: inputs.stockMarketReturn, optimistic: inputs.stockMarketReturn }
+          }
+          onChange={handleStockMarketReturnChange}
+        />
+      ) : (
+        <InputField
+          label="Stock Market Return (% p.a.)"
+          value={isScenarioValue(inputs.stockMarketReturn) ? inputs.stockMarketReturn.baseline : inputs.stockMarketReturn}
+          onChange={(stockMarketReturn) => onChange({ ...inputs, stockMarketReturn })}
+        />
+      )}
 
       <InputField
         label="Dividend Yield (% p.a.)"
@@ -52,11 +76,23 @@ export default function InvestmentInputsCard({
         </select>
       </label>
 
-      <InputField
-        label="Property Growth Rate (% p.a.)"
-        value={inputs.propertyGrowthRate}
-        onChange={(propertyGrowthRate) => onChange({ ...inputs, propertyGrowthRate })}
-      />
+      {scenarioMode ? (
+        <MultiInput
+          label="Property Growth Rate (% p.a.)"
+          value={
+            isScenarioValue(inputs.propertyGrowthRate)
+              ? inputs.propertyGrowthRate
+              : { pessimistic: inputs.propertyGrowthRate, baseline: inputs.propertyGrowthRate, optimistic: inputs.propertyGrowthRate }
+          }
+          onChange={handlePropertyGrowthRateChange}
+        />
+      ) : (
+        <InputField
+          label="Property Growth Rate (% p.a.)"
+          value={isScenarioValue(inputs.propertyGrowthRate) ? inputs.propertyGrowthRate.baseline : inputs.propertyGrowthRate}
+          onChange={(propertyGrowthRate) => onChange({ ...inputs, propertyGrowthRate })}
+        />
+      )}
 
       <InputField
         label="Inflation Rate (% p.a.)"

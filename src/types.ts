@@ -1,8 +1,14 @@
+export interface ScenarioValue {
+  pessimistic: number;
+  baseline: number;
+  optimistic: number;
+}
+
 export interface PropertyInputs {
   propertyPrice: number;
   deposit: number;
   loanTerm: number;
-  interestRate: number;
+  interestRate: number | ScenarioValue;
   stampDuty: number;
   otherPurchaseCosts: number;
   maintenanceRate: number;
@@ -16,15 +22,15 @@ export interface PropertyInputs {
 
 export interface RentInputs {
   monthlyRent: number;
-  rentIncreaseRate: number;
+  rentIncreaseRate: number | ScenarioValue;
   movingFrequency: number;
   movingCost: number;
   contentsInsurance: number;
 }
 
 export interface InvestmentInputs {
-  stockMarketReturn: number;
-  propertyGrowthRate: number;
+  stockMarketReturn: number | ScenarioValue;
+  propertyGrowthRate: number | ScenarioValue;
   marginalTaxRate: number;
   inflationRate: number;
   stockTransactionCost: number;
@@ -52,4 +58,10 @@ export interface YearlySnapshot {
   rentNetPositionAfterTax: number;
   rentDividends: number;
   rentFrankingCredits: number;
+}
+
+export interface ScenarioResults {
+  pessimistic: YearlySnapshot[];
+  baseline: YearlySnapshot[];
+  optimistic: YearlySnapshot[];
 }

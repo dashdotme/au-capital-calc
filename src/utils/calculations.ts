@@ -1,4 +1,15 @@
-import type { PropertyInputs, RentInputs, InvestmentInputs, YearlySnapshot } from '../types';
+import type { PropertyInputs, RentInputs, InvestmentInputs, YearlySnapshot, ScenarioValue, ScenarioResults } from '../types';
+
+export function isScenarioValue(value: number | ScenarioValue): value is ScenarioValue {
+  return typeof value === 'object' && 'pessimistic' in value && 'baseline' in value && 'optimistic' in value;
+}
+
+export function resolveScenarioValue(
+  value: number | ScenarioValue,
+  scenario: 'pessimistic' | 'baseline' | 'optimistic'
+): number {
+  return isScenarioValue(value) ? value[scenario] : value;
+}
 
 export function calculateMortgagePayment(
   principal: number,
@@ -94,16 +105,30 @@ export function runComparison(
   investmentInputs: InvestmentInputs,
   years: number
 ): YearlySnapshot[] {
+  // Ensure we have numeric values (for when called directly or from scenario comparison)
+  const interestRate = typeof propertyInputs.interestRate === 'number'
+    ? propertyInputs.interestRate
+    : propertyInputs.interestRate.baseline;
+  const rentIncreaseRate = typeof rentInputs.rentIncreaseRate === 'number'
+    ? rentInputs.rentIncreaseRate
+    : rentInputs.rentIncreaseRate.baseline;
+  const stockMarketReturn = typeof investmentInputs.stockMarketReturn === 'number'
+    ? investmentInputs.stockMarketReturn
+    : investmentInputs.stockMarketReturn.baseline;
+  const propertyGrowthRate = typeof investmentInputs.propertyGrowthRate === 'number'
+    ? investmentInputs.propertyGrowthRate
+    : investmentInputs.propertyGrowthRate.baseline;
+
   const loanAmount = propertyInputs.propertyPrice - propertyInputs.deposit;
   const monthlyMortgage = calculateMortgagePayment(
     loanAmount,
-    propertyInputs.interestRate,
+    interestRate,
     propertyInputs.loanTerm
   );
 
   const amortization = calculateAmortization(
     loanAmount,
-    propertyInputs.interestRate,
+    interestRate,
     propertyInputs.loanTerm,
     monthlyMortgage,
     propertyInputs.offsetAccountBalance ?? 0
@@ -129,12 +154,12 @@ export function runComparison(
   const dividendYield = investmentInputs.dividendYield ?? 0;
   const frankingLevel = investmentInputs.frankingLevel ?? 0;
   const dividendReinvestment = investmentInputs.dividendReinvestment ?? true;
-  const monthlyStockReturn = investmentInputs.stockMarketReturn / 100 / 12;
+  const monthlyStockReturn = stockMarketReturn / 100 / 12;
 
   for (let year = 0; year <= years; year++) {
     const propertyValue =
       propertyInputs.propertyPrice *
-      Math.pow(1 + investmentInputs.propertyGrowthRate / 100, year);
+      Math.pow(1 + propertyGrowthRate / 100, year);
 
     const mortgageData = amortization[year];
     const annualMaintenance = propertyValue * (propertyInputs.maintenanceRate / 100);
@@ -234,7 +259,7 @@ export function runComparison(
       }
 
       cumulativeRent += currentRent * 12;
-      currentRent = currentRent * (1 + rentInputs.rentIncreaseRate / 100);
+      currentRent = currentRent * (1 + rentIncreaseRate / 100);
     }
 
     const rentNetPosition =
@@ -269,6 +294,49 @@ export function runComparison(
       rentDividends: cumulativeDividends,
       rentFrankingCredits: cumulativeFrankingCredits,
     });
+  }
+
+  return results;
+}
+
+export function runScenarioComparison(
+  propertyInputs: PropertyInputs,
+  rentInputs: RentInputs,
+  investmentInputs: InvestmentInputs,
+  years: number
+): ScenarioResults {
+  const scenarios: Array<'pessimistic' | 'baseline' | 'optimistic'> = ['pessimistic', 'baseline', 'optimistic'];
+
+  const results: ScenarioResults = {
+    pessimistic: [],
+    baseline: [],
+    optimistic: [],
+  };
+
+  for (const scenario of scenarios) {
+    // Create resolved inputs for this scenario
+    const resolvedPropertyInputs: PropertyInputs = {
+      ...propertyInputs,
+      interestRate: resolveScenarioValue(propertyInputs.interestRate, scenario),
+    };
+
+    const resolvedRentInputs: RentInputs = {
+      ...rentInputs,
+      rentIncreaseRate: resolveScenarioValue(rentInputs.rentIncreaseRate, scenario),
+    };
+
+    const resolvedInvestmentInputs: InvestmentInputs = {
+      ...investmentInputs,
+      stockMarketReturn: resolveScenarioValue(investmentInputs.stockMarketReturn, scenario),
+      propertyGrowthRate: resolveScenarioValue(investmentInputs.propertyGrowthRate, scenario),
+    };
+
+    results[scenario] = runComparison(
+      resolvedPropertyInputs,
+      resolvedRentInputs,
+      resolvedInvestmentInputs,
+      years
+    );
   }
 
   return results;

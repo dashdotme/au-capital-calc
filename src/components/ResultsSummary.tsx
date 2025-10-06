@@ -1,10 +1,11 @@
-import type { YearlySnapshot } from '../types';
+import type { YearlySnapshot, ScenarioResults } from '../types';
 
 interface ResultsSummaryProps {
   timeHorizon: number;
-  finalResult: YearlySnapshot;
-  advantageBeforeTax: number;
-  advantageAfterTax: number;
+  finalResult?: YearlySnapshot;
+  advantageBeforeTax?: number;
+  advantageAfterTax?: number;
+  scenarioResults?: ScenarioResults;
 }
 
 export default function ResultsSummary({
@@ -12,9 +13,75 @@ export default function ResultsSummary({
   finalResult,
   advantageBeforeTax,
   advantageAfterTax,
+  scenarioResults,
 }: ResultsSummaryProps) {
   const formatCurrency = (value: number) =>
     `$${value.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`;
+
+  // If we have scenario results, display three scenarios
+  if (scenarioResults) {
+    const pessimisticFinal = scenarioResults.pessimistic[scenarioResults.pessimistic.length - 1];
+    const baselineFinal = scenarioResults.baseline[scenarioResults.baseline.length - 1];
+    const optimisticFinal = scenarioResults.optimistic[scenarioResults.optimistic.length - 1];
+
+    const scenarios = [
+      { name: 'Pessimistic', final: pessimisticFinal, color: 'border-red-500' },
+      { name: 'Baseline', final: baselineFinal, color: 'border-blue-500' },
+      { name: 'Optimistic', final: optimisticFinal, color: 'border-green-500' },
+    ];
+
+    return (
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold mb-6 text-accent">
+          After {timeHorizon} Years - Scenario Comparison
+        </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {scenarios.map(({ name, final, color }) => {
+            const advantageAfterTax =
+              final.rentNetPositionAfterTax - final.mortgageNetPositionAfterSale;
+
+            return (
+              <div key={name} className={`p-6 rounded-lg shadow-xl bg-card border-l-4 ${color}`}>
+                <h3 className="text-xl font-semibold mb-4 text-accent">{name}</h3>
+
+                <div className="mb-4">
+                  <h4 className="font-semibold text-sm mb-2 text-text-primary">Buying (Mortgage)</h4>
+                  <p className="text-xs text-text-secondary">
+                    Property Value: {formatCurrency(final.mortgagePropertyValue)}
+                  </p>
+                  <p className="text-sm font-bold mt-1 text-text-primary">
+                    Net (after sale): {formatCurrency(final.mortgageNetPositionAfterSale)}
+                  </p>
+                </div>
+
+                <div className="mb-4 pb-4 border-b border-border">
+                  <h4 className="font-semibold text-sm mb-2 text-text-primary">Renting + Investing</h4>
+                  <p className="text-xs text-text-secondary">
+                    Investment: {formatCurrency(final.rentInvestmentValue)}
+                  </p>
+                  <p className="text-sm font-bold mt-1 text-text-primary">
+                    Net (after CGT): {formatCurrency(final.rentNetPositionAfterTax)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold text-text-secondary mb-1">Winner:</p>
+                  <p className="text-lg font-bold text-accent">
+                    {advantageAfterTax > 0
+                      ? `Renting +${formatCurrency(Math.abs(advantageAfterTax))}`
+                      : `Buying +${formatCurrency(Math.abs(advantageAfterTax))}`}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Original single-scenario view
+  if (!finalResult) return null;
 
   return (
     <div className="p-6 rounded-lg shadow-xl mb-6 bg-card">
@@ -139,15 +206,15 @@ export default function ResultsSummary({
           Comparison (After All Exit Costs & Taxes)
         </h3>
         <p className="text-2xl font-bold text-accent">
-          {advantageAfterTax > 0
-            ? `Renting + Investing is ahead by ${formatCurrency(Math.abs(advantageAfterTax))}`
-            : `Buying is ahead by ${formatCurrency(Math.abs(advantageAfterTax))}`}
+          {(advantageAfterTax ?? 0) > 0
+            ? `Renting + Investing is ahead by ${formatCurrency(Math.abs(advantageAfterTax ?? 0))}`
+            : `Buying is ahead by ${formatCurrency(Math.abs(advantageAfterTax ?? 0))}`}
         </p>
         <p className="text-sm mt-2 text-text-secondary">
           Before tax & exit costs:{' '}
-          {advantageBeforeTax > 0
-            ? `Renting ahead by ${formatCurrency(Math.abs(advantageBeforeTax))}`
-            : `Buying ahead by ${formatCurrency(Math.abs(advantageBeforeTax))}`}
+          {(advantageBeforeTax ?? 0) > 0
+            ? `Renting ahead by ${formatCurrency(Math.abs(advantageBeforeTax ?? 0))}`
+            : `Buying ahead by ${formatCurrency(Math.abs(advantageBeforeTax ?? 0))}`}
         </p>
         {finalResult.rentFrankingCredits > 0 && (
           <p className="text-sm mt-2 text-text-secondary">

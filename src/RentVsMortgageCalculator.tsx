@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
 import type { PropertyInputs, RentInputs, InvestmentInputs } from './types';
-import { calculateMortgagePayment, runComparison } from './utils/calculations';
+import { calculateMortgagePayment, runComparison, runScenarioComparison, isScenarioValue } from './utils/calculations';
 import PropertyInputsCard from './components/PropertyInputsCard';
 import RentInputsCard from './components/RentInputsCard';
 import InvestmentInputsCard from './components/InvestmentInputsCard';
 import ResultsSummary from './components/ResultsSummary';
 import ComparisonChart from './components/ComparisonChart';
+import ScenarioToggle from './components/ScenarioToggle';
 
 export default function RentVsMortgageCalculator() {
   const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>({
@@ -44,55 +45,93 @@ export default function RentVsMortgageCalculator() {
   });
 
   const [timeHorizon, setTimeHorizon] = useState(30);
+  const [scenarioMode, setScenarioMode] = useState(false);
 
-  const results = useMemo(
-    () => runComparison(propertyInputs, rentInputs, investmentInputs, timeHorizon),
-    [propertyInputs, rentInputs, investmentInputs, timeHorizon]
-  );
+  const hasScenarioValues = useMemo(() => {
+    return (
+      isScenarioValue(propertyInputs.interestRate) ||
+      isScenarioValue(rentInputs.rentIncreaseRate) ||
+      isScenarioValue(investmentInputs.stockMarketReturn) ||
+      isScenarioValue(investmentInputs.propertyGrowthRate)
+    );
+  }, [propertyInputs.interestRate, rentInputs.rentIncreaseRate, investmentInputs.stockMarketReturn, investmentInputs.propertyGrowthRate]);
+
+  const results = useMemo(() => {
+    if (scenarioMode && hasScenarioValues) {
+      return runScenarioComparison(propertyInputs, rentInputs, investmentInputs, timeHorizon);
+    }
+    return null;
+  }, [scenarioMode, hasScenarioValues, propertyInputs, rentInputs, investmentInputs, timeHorizon]);
+
+  const singleResults = useMemo(() => {
+    if (!scenarioMode || !hasScenarioValues) {
+      return runComparison(propertyInputs, rentInputs, investmentInputs, timeHorizon);
+    }
+    return null;
+  }, [scenarioMode, hasScenarioValues, propertyInputs, rentInputs, investmentInputs, timeHorizon]);
 
   const loanAmount = propertyInputs.propertyPrice - propertyInputs.deposit;
+  const interestRateForPayment = isScenarioValue(propertyInputs.interestRate)
+    ? propertyInputs.interestRate.baseline
+    : propertyInputs.interestRate;
   const monthlyMortgage = calculateMortgagePayment(
     loanAmount,
-    propertyInputs.interestRate,
+    interestRateForPayment,
     propertyInputs.loanTerm
   );
-
-  const finalResult = results[results.length - 1];
-  const advantageBeforeTax =
-    finalResult.rentNetPosition - finalResult.mortgageNetPosition;
-  const advantageAfterTax =
-    finalResult.rentNetPositionAfterTax - finalResult.mortgageNetPositionAfterSale;
 
   return (
     <div className="p-6 max-w-7xl mx-auto min-h-screen bg-primary">
       <h1 className="text-4xl font-bold mb-8 text-accent">
         AU Rent vs Mortgage Calculator
       </h1>
+      <ScenarioToggle enabled={scenarioMode} onChange={setScenarioMode} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <PropertyInputsCard
           inputs={propertyInputs}
           onChange={setPropertyInputs}
           monthlyPayment={monthlyMortgage}
+          scenarioMode={scenarioMode}
         />
         <RentInputsCard
           inputs={rentInputs}
           onChange={setRentInputs}
           monthlySavings={monthlyMortgage - rentInputs.monthlyRent}
+          scenarioMode={scenarioMode}
         />
         <InvestmentInputsCard
           inputs={investmentInputs}
           onChange={setInvestmentInputs}
           timeHorizon={timeHorizon}
           onTimeHorizonChange={setTimeHorizon}
+          scenarioMode={scenarioMode}
         />
       </div>
-      <ResultsSummary
-        timeHorizon={timeHorizon}
-        finalResult={finalResult}
-        advantageBeforeTax={advantageBeforeTax}
-        advantageAfterTax={advantageAfterTax}
-      />
-      <ComparisonChart results={results} />
+      {scenarioMode && hasScenarioValues && results ? (
+        <>
+          <ResultsSummary
+            timeHorizon={timeHorizon}
+            scenarioResults={results}
+          />
+          <ComparisonChart scenarioResults={results} />
+        </>
+      ) : singleResults ? (
+        <>
+          <ResultsSummary
+            timeHorizon={timeHorizon}
+            finalResult={singleResults[singleResults.length - 1]}
+            advantageBeforeTax={
+              singleResults[singleResults.length - 1].rentNetPosition -
+              singleResults[singleResults.length - 1].mortgageNetPosition
+            }
+            advantageAfterTax={
+              singleResults[singleResults.length - 1].rentNetPositionAfterTax -
+              singleResults[singleResults.length - 1].mortgageNetPositionAfterSale
+            }
+          />
+          <ComparisonChart results={singleResults} />
+        </>
+      ) : null}
     </div>
   );
 }
