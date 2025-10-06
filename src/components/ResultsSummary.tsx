@@ -47,6 +47,12 @@ export default function ResultsSummary({
               </span>
             </p>
             <p className="text-sm text-text-secondary">
+              Total Interest:{' '}
+              <span className="font-semibold text-text-primary">
+                {formatCurrency(finalResult.mortgageTotalInterest)}
+              </span>
+            </p>
+            <p className="text-sm text-text-secondary">
               Maintenance:{' '}
               <span className="font-semibold text-text-primary">
                 {formatCurrency(finalResult.mortgageMaintenance)}
@@ -102,6 +108,22 @@ export default function ResultsSummary({
                 {formatCurrency(finalResult.rentInsurance)}
               </span>
             </p>
+            {finalResult.rentDividends > 0 && (
+              <>
+                <p className="text-sm text-text-secondary">
+                  Dividends Received:{' '}
+                  <span className="font-semibold text-green-400">
+                    +{formatCurrency(finalResult.rentDividends)}
+                  </span>
+                </p>
+                <p className="text-sm text-text-secondary">
+                  Franking Credits:{' '}
+                  <span className="font-semibold text-green-400">
+                    +{formatCurrency(finalResult.rentFrankingCredits)}
+                  </span>
+                </p>
+              </>
+            )}
           </div>
           <p className="text-lg font-bold mt-4 text-text-primary">
             Net (before tax): {formatCurrency(finalResult.rentNetPosition)}
@@ -127,6 +149,11 @@ export default function ResultsSummary({
             ? `Renting ahead by ${formatCurrency(Math.abs(advantageBeforeTax))}`
             : `Buying ahead by ${formatCurrency(Math.abs(advantageBeforeTax))}`}
         </p>
+        {finalResult.rentFrankingCredits > 0 && (
+          <p className="text-sm mt-2 text-text-secondary">
+            Stocks benefited from {formatCurrency(finalResult.rentFrankingCredits)} in franking credit refunds
+          </p>
+        )}
       </div>
     </div>
   );

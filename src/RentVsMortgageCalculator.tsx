@@ -21,6 +21,7 @@ export default function RentVsMortgageCalculator() {
     contentsInsurance: 1000,
     sellingCostRate: 3.0,
     capitalGainsTaxRate: 0,
+    offsetAccountBalance: 50000,
   });
 
   const [rentInputs, setRentInputs] = useState<RentInputs>({
@@ -37,6 +38,9 @@ export default function RentVsMortgageCalculator() {
     marginalTaxRate: 37,
     inflationRate: 2.5,
     stockTransactionCost: 0.1,
+    dividendYield: 1.5,
+    frankingLevel: 0,
+    dividendReinvestment: true,
   });
 
   const [timeHorizon, setTimeHorizon] = useState(30);
@@ -64,18 +68,17 @@ export default function RentVsMortgageCalculator() {
       <h1 className="text-4xl font-bold mb-8 text-accent">
         AU Rent vs Mortgage Calculator
       </h1>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <PropertyInputsCard
           inputs={propertyInputs}
           onChange={setPropertyInputs}
           monthlyPayment={monthlyMortgage}
-        /><RentInputsCard
+        />
+        <RentInputsCard
           inputs={rentInputs}
           onChange={setRentInputs}
           monthlySavings={monthlyMortgage - rentInputs.monthlyRent}
         />
-
         <InvestmentInputsCard
           inputs={investmentInputs}
           onChange={setInvestmentInputs}
@@ -83,14 +86,12 @@ export default function RentVsMortgageCalculator() {
           onTimeHorizonChange={setTimeHorizon}
         />
       </div>
-
       <ResultsSummary
         timeHorizon={timeHorizon}
         finalResult={finalResult}
         advantageBeforeTax={advantageBeforeTax}
         advantageAfterTax={advantageAfterTax}
       />
-
       <ComparisonChart results={results} />
     </div>
   );

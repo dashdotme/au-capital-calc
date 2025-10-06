@@ -11,6 +11,7 @@ export interface PropertyInputs {
   contentsInsurance: number;
   sellingCostRate: number;
   capitalGainsTaxRate: number;
+  offsetAccountBalance?: number;
 }
 
 export interface RentInputs {
@@ -27,6 +28,9 @@ export interface InvestmentInputs {
   marginalTaxRate: number;
   inflationRate: number;
   stockTransactionCost: number;
+  dividendYield?: number;
+  frankingLevel?: number;
+  dividendReinvestment?: boolean;
 }
 
 export interface YearlySnapshot {
@@ -39,10 +43,13 @@ export interface YearlySnapshot {
   mortgageMaintenance: number;
   mortgageRates: number;
   mortgageInsurance: number;
+  mortgageTotalInterest: number;
   rentTotalPaid: number;
   rentMovingCosts: number;
   rentInsurance: number;
   rentInvestmentValue: number;
   rentNetPosition: number;
   rentNetPositionAfterTax: number;
+  rentDividends: number;
+  rentFrankingCredits: number;
 }

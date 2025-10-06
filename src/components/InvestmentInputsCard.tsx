@@ -25,6 +25,34 @@ export default function InvestmentInputsCard({
       />
 
       <InputField
+        label="Dividend Yield (% p.a.)"
+        value={inputs.dividendYield ?? 0}
+        onChange={(dividendYield) => onChange({ ...inputs, dividendYield })}
+        helpText="ASX average ~4%, US markets ~1.5-2%, set to 0 for no dividends"
+      />
+
+      <InputField
+        label="Franking Level (%)"
+        value={inputs.frankingLevel ?? 0}
+        onChange={(frankingLevel) => onChange({ ...inputs, frankingLevel })}
+        helpText="% of dividends fully franked. ASX average ~80%, international stocks 0%"
+      />
+
+      <label className="block mb-4">
+        <span className="text-sm block mb-1 text-[var(--color-text-secondary)]">
+          Dividend Reinvestment
+        </span>
+        <select
+          value={String(inputs.dividendReinvestment ?? true)}
+          onChange={(e) => onChange({ ...inputs, dividendReinvestment: e.target.value === 'true' })}
+          className="input-field"
+        >
+          <option value="true">Reinvest dividends</option>
+          <option value="false">Take as cash (not reinvested)</option>
+        </select>
+      </label>
+
+      <InputField
         label="Property Growth Rate (% p.a.)"
         value={inputs.propertyGrowthRate}
         onChange={(propertyGrowthRate) => onChange({ ...inputs, propertyGrowthRate })}

@@ -41,6 +41,13 @@ export default function PropertyInputsCard({
       />
 
       <InputField
+        label="Offset Account Balance"
+        value={inputs.offsetAccountBalance ?? 0}
+        onChange={(offsetAccountBalance) => onChange({ ...inputs, offsetAccountBalance })}
+        helpText="Savings kept in offset account to reduce interest charges"
+      />
+
+      <InputField
         label="Stamp Duty"
         value={inputs.stampDuty}
         onChange={(stampDuty) => onChange({ ...inputs, stampDuty })}
