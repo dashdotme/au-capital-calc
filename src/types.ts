@@ -24,7 +24,9 @@ export interface RentInputs {
 export interface InvestmentInputs {
   stockMarketReturn: number;
   propertyGrowthRate: number;
-  capitalGainsTaxRateStocks: number;
+  marginalTaxRate: number;
+  inflationRate: number;
+  stockTransactionCost: number;
 }
 
 export interface YearlySnapshot {

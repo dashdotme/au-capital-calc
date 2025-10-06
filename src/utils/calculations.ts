@@ -67,9 +67,13 @@ export function runComparison(
   const upfrontCosts = propertyInputs.stampDuty + propertyInputs.otherPurchaseCosts;
   const initialCapital = propertyInputs.deposit + upfrontCosts;
 
+  // Apply transaction costs when initially investing
+  const transactionCostRate = investmentInputs.stockTransactionCost / 100;
+  const initialInvestmentAfterFees = initialCapital * (1 - transactionCostRate);
+
   const results: YearlySnapshot[] = [];
 
-  let rentInvestment = initialCapital;
+  let rentInvestment = initialInvestmentAfterFees;
   let cumulativeRent = 0;
   let currentRent = rentInputs.monthlyRent;
   let cumulativeMaintenance = 0;
@@ -77,6 +81,8 @@ export function runComparison(
   let cumulativeMovingCosts = 0;
   let cumulativeOwnerInsurance = 0;
   let cumulativeRenterInsurance = 0;
+
+  const monthlyStockReturn = investmentInputs.stockMarketReturn / 100 / 12;
 
   for (let year = 0; year <= years; year++) {
     const propertyValue =
@@ -97,19 +103,19 @@ export function runComparison(
       year === 0
         ? propertyInputs.buildingInsurance
         : propertyInputs.buildingInsurance *
-          Math.pow(1 + investmentInputs.propertyGrowthRate / 100, year);
+          Math.pow(1 + investmentInputs.inflationRate / 100, year);
 
     const annualOwnerContentsInsurance =
       year === 0
         ? propertyInputs.contentsInsurance
         : propertyInputs.contentsInsurance *
-          Math.pow(1 + investmentInputs.propertyGrowthRate / 100, year);
+          Math.pow(1 + investmentInputs.inflationRate / 100, year);
 
     const annualRenterInsurance =
       year === 0
         ? rentInputs.contentsInsurance
         : rentInputs.contentsInsurance *
-          Math.pow(1 + investmentInputs.propertyGrowthRate / 100, year);
+          Math.pow(1 + investmentInputs.inflationRate / 100, year);
 
     if (year > 0) {
       cumulativeMaintenance += annualMaintenance;
@@ -141,6 +147,7 @@ export function runComparison(
       sellingCosts -
       capitalGainsTax;
 
+    // Monthly investment contributions with monthly compounding
     if (year > 0) {
       const monthlyOwnershipCost =
         monthlyMortgage +
@@ -151,21 +158,29 @@ export function runComparison(
 
       const monthlyRenterCosts = currentRent + annualRenterInsurance / 12;
       const monthlySavings = monthlyOwnershipCost - monthlyRenterCosts;
-      const yearlyInvestment = monthlySavings * 12;
 
-      rentInvestment = rentInvestment * (1 + investmentInputs.stockMarketReturn / 100);
-      rentInvestment += yearlyInvestment;
+      // Apply monthly compounding for more accurate modeling
+      for (let month = 1; month <= 12; month++) {
+        rentInvestment = rentInvestment * (1 + monthlyStockReturn);
+        const contributionAfterFees = monthlySavings * (1 - transactionCostRate);
+        rentInvestment += contributionAfterFees;
+      }
+
       cumulativeRent += currentRent * 12;
       currentRent = currentRent * (1 + rentInputs.rentIncreaseRate / 100);
     }
 
     const rentNetPosition =
       rentInvestment - cumulativeRent - cumulativeMovingCosts - cumulativeRenterInsurance;
+
+    // Calculate CGT on stocks with proper 50% discount for assets held > 12 months
     const stocksCapitalGain = rentInvestment - initialCapital;
-    const stocksCapitalGainsTax =
-      stocksCapitalGain > 0
-        ? stocksCapitalGain * (investmentInputs.capitalGainsTaxRateStocks / 100)
-        : 0;
+    let stocksCapitalGainsTax = 0;
+    if (stocksCapitalGain > 0) {
+      const discountedGain = stocksCapitalGain * 0.5;
+      stocksCapitalGainsTax = discountedGain * (investmentInputs.marginalTaxRate / 100);
+    }
+
     const rentNetPositionAfterTax = rentNetPosition - stocksCapitalGainsTax;
 
     results.push({

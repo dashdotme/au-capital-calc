@@ -32,7 +32,6 @@ export default function PropertyInputsCard({
         label="Interest Rate (%)"
         value={inputs.interestRate}
         onChange={(interestRate) => onChange({ ...inputs, interestRate })}
-        step="0.1"
       />
 
       <InputField
@@ -58,7 +57,6 @@ export default function PropertyInputsCard({
         label="Maintenance Rate (% p.a.)"
         value={inputs.maintenanceRate}
         onChange={(maintenanceRate) => onChange({ ...inputs, maintenanceRate })}
-        step="0.1"
       />
 
       <InputField
@@ -83,7 +81,6 @@ export default function PropertyInputsCard({
         label="Selling Costs (%)"
         value={inputs.sellingCostRate}
         onChange={(sellingCostRate) => onChange({ ...inputs, sellingCostRate })}
-        step="0.1"
         helpText="Agent fees, marketing, legal"
       />
 
@@ -91,7 +88,6 @@ export default function PropertyInputsCard({
         label="CGT Rate on Property (%)"
         value={inputs.capitalGainsTaxRate}
         onChange={(capitalGainsTaxRate) => onChange({ ...inputs, capitalGainsTaxRate })}
-        step="0.1"
         helpText="0% for primary residence (AU)"
       />
 

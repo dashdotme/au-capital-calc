@@ -22,25 +22,46 @@ export default function InvestmentInputsCard({
         label="Stock Market Return (% p.a.)"
         value={inputs.stockMarketReturn}
         onChange={(stockMarketReturn) => onChange({ ...inputs, stockMarketReturn })}
-        step="0.1"
       />
 
       <InputField
         label="Property Growth Rate (% p.a.)"
         value={inputs.propertyGrowthRate}
         onChange={(propertyGrowthRate) => onChange({ ...inputs, propertyGrowthRate })}
-        step="0.1"
       />
 
       <InputField
-        label="CGT Rate on Stocks (%)"
-        value={inputs.capitalGainsTaxRateStocks}
-        onChange={(capitalGainsTaxRateStocks) =>
-          onChange({ ...inputs, capitalGainsTaxRateStocks })
-        }
-        step="0.1"
-        helpText="After 50% CGT discount (AU)"
+        label="Inflation Rate (% p.a.)"
+        value={inputs.inflationRate}
+        onChange={(inflationRate) => onChange({ ...inputs, inflationRate })}
+        helpText="For insurance and general costs"
       />
+
+      <InputField
+        label="Stock Transaction Costs (%)"
+        value={inputs.stockTransactionCost}
+        onChange={(stockTransactionCost) => onChange({ ...inputs, stockTransactionCost })}
+        helpText="Typical: 0.1-0.2% for index funds, 0.5%+ for active trading. Higher if investing abroad. Applied to each monthly contribution."
+      />
+
+      <label className="block mb-4">
+        <span className="text-sm block mb-1 text-[var(--color-text-secondary)]">
+          Your Marginal Tax Rate
+        </span>
+        <select
+          value={inputs.marginalTaxRate}
+          onChange={(e) => onChange({ ...inputs, marginalTaxRate: Number(e.target.value) })}
+          className="input-field"
+        >
+          <option value="19">19% ($18,201 - $45,000)</option>
+          <option value="32.5">32.5% ($45,001 - $135,000)</option>
+          <option value="37">37% ($135,001 - $190,000)</option>
+          <option value="45">45% ($190,001+)</option>
+        </select>
+        <span className="text-xs mt-1 block text-[var(--color-text-secondary)] opacity-70">
+          50% CGT discount applied automatically for assets held 12+ months
+        </span>
+      </label>
 
       <InputField
         label="Time Horizon (years)"

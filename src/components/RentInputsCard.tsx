@@ -26,14 +26,12 @@ export default function RentInputsCard({
         label="Annual Rent Increase (%)"
         value={inputs.rentIncreaseRate}
         onChange={(rentIncreaseRate) => onChange({ ...inputs, rentIncreaseRate })}
-        step="0.1"
       />
 
       <InputField
         label="Move Every (years)"
         value={inputs.movingFrequency}
         onChange={(movingFrequency) => onChange({ ...inputs, movingFrequency })}
-        min="1"
       />
 
       <InputField
