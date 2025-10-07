@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { formatCompactValue } from '../utils/focusRanges';
 
 interface FocusSliderProps {
   values: number[];
@@ -89,17 +90,19 @@ export default function FocusSlider({
       </div>
 
       {/* Labels */}
-      <div className="relative h-12 mt-2">
+      <div className="relative h-16 mt-2">
         {values.map((value, index) => (
           <div
             key={index}
             style={{
               left: `${getPosition(value)}%`,
               color: colors[index],
+              transform: 'translateX(-50%) rotate(-30deg)',
+              transformOrigin: 'center top',
             }}
-            className="absolute -translate-x-1/2 text-xs font-semibold whitespace-nowrap"
+            className="absolute text-xs font-semibold whitespace-nowrap"
           >
-            {unit === '$' ? `$${Math.round(value)}` : `${value}${unit}`}
+            {formatCompactValue(value, unit)}
           </div>
         ))}
       </div>

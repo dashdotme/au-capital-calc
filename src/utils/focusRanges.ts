@@ -102,3 +102,16 @@ export function getMetricUnit(metricKey: string): string {
   }
   return '%';
 }
+
+export function formatCompactValue(value: number, unit: string): string {
+  if (unit === '$') {
+    if (value >= 1000000) {
+      return `$${(value / 1000000).toFixed(1)}m`;
+    }
+    if (value >= 1000) {
+      return `$${(value / 1000).toFixed(1)}k`;
+    }
+    return `$${Math.round(value)}`;
+  }
+  return `${value}${unit}`;
+}

@@ -71,7 +71,7 @@ export default function ComparisonChart({ results, scenarioResults }: Comparison
                 `$${value.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`
               }
             />
-            <Legend wrapperStyle={{ color: '#e2e8f0', height:'60px', paddingTop: '30px' }} />
+            <Legend wrapperStyle={{ color: '#e2e8f0', height:'80px', paddingTop: '40px' }} />
             {/* Pessimistic lines (red/pink shades) */}
             <Line
               type="monotone"
@@ -180,7 +180,7 @@ export default function ComparisonChart({ results, scenarioResults }: Comparison
               `$${value.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`
             }
           />
-          <Legend wrapperStyle={{ color: '#e2e8f0', height:'40px', paddingTop: '30px' }} />
+          <Legend wrapperStyle={{ color: '#e2e8f0', height:'60px', paddingTop: '40px' }} />
           <Line
             type="monotone"
             dataKey="mortgageNetPositionAfterSale"

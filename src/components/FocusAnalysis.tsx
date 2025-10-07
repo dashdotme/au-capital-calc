@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import type { PropertyInputs, RentInputs, InvestmentInputs } from '../types';
 import { runFocusComparison, type FocusResults } from '../utils/calculations';
-import { calculateFocusRange, getMetricLabel, getMetricUnit } from '../utils/focusRanges';
+import { calculateFocusRange, getMetricLabel, getMetricUnit, formatCompactValue } from '../utils/focusRanges';
 import FocusSlider from './FocusSlider';
 import { isScenarioValue } from '../utils/calculations';
 
@@ -147,7 +147,7 @@ export default function FocusAnalysis({
               }}
               formatter={(value: number) => formatCurrency(value)}
             />
-            <Legend wrapperStyle={{ color: '#e2e8f0' }} />
+            <Legend wrapperStyle={{ color: '#e2e8f0', height: '80px', paddingTop: '40px' }} />
 
             {/* Baseline */}
             <Line
@@ -167,7 +167,7 @@ export default function FocusAnalysis({
                 type="monotone"
                 dataKey={`scenario${index}`}
                 stroke={colors[index]}
-                name={`${unit === '$' ? `$${Math.round(sliderValues[index])}` : `${sliderValues[index]}${unit}`}`}
+                name={formatCompactValue(sliderValues[index], unit)}
                 strokeWidth={2}
                 dot={false}
               />
@@ -194,7 +194,7 @@ export default function FocusAnalysis({
                 <tr key={index} className="border-b border-border/50">
                   <td className="py-2 px-4">
                     <span style={{ color: colors[index] }} className="font-semibold">
-                      {unit === '$' ? `$${Math.round(sliderValues[index])}` : `${sliderValues[index]}${unit}`}
+                      {formatCompactValue(sliderValues[index], unit)}
                     </span>
                   </td>
                   <td className="text-right py-2 px-4 text-text-primary">
