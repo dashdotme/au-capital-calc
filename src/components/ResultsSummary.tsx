@@ -1,4 +1,5 @@
-import type { YearlySnapshot, ScenarioResults } from '../types';
+import { useState } from 'react';
+import type { YearlySnapshot, ScenarioResults, BreakEvenResults } from '../types';
 
 interface ResultsSummaryProps {
   timeHorizon: number;
@@ -6,6 +7,7 @@ interface ResultsSummaryProps {
   advantageBeforeTax?: number;
   advantageAfterTax?: number;
   scenarioResults?: ScenarioResults;
+  breakEvenResults?: BreakEvenResults;
 }
 
 export default function ResultsSummary({
@@ -14,7 +16,10 @@ export default function ResultsSummary({
   advantageBeforeTax,
   advantageAfterTax,
   scenarioResults,
+  breakEvenResults,
 }: ResultsSummaryProps) {
+  const [breakEvenExpanded, setBreakEvenExpanded] = useState(false);
+
   const formatCurrency = (value: number) =>
     `$${value.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`;
 
@@ -31,52 +36,117 @@ export default function ResultsSummary({
     ];
 
     return (
-      <div className="mb-6">
-        <h2 className="text-2xl font-semibold mb-6 text-accent">
-          After {timeHorizon} Years - Scenario Comparison
-        </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {scenarios.map(({ name, final, color }) => {
-            const advantageAfterTax =
-              final.rentNetPositionAfterTax - final.mortgageNetPositionAfterSale;
+      <>
+        <div className="mb-6">
+          <h2 className="text-2xl font-semibold mb-6 text-accent">
+            After {timeHorizon} Years - Scenario Comparison
+          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {scenarios.map(({ name, final, color }) => {
+              const advantageAfterTax =
+                final.rentNetPositionAfterTax - final.mortgageNetPositionAfterSale;
 
-            return (
-              <div key={name} className={`p-6 rounded-lg shadow-xl bg-card border-l-4 ${color}`}>
-                <h3 className="text-xl font-semibold mb-4 text-accent">{name}</h3>
+              return (
+                <div key={name} className={`p-6 rounded-lg shadow-xl bg-card border-l-4 ${color}`}>
+                  <h3 className="text-xl font-semibold mb-4 text-accent">{name}</h3>
 
-                <div className="mb-4">
-                  <h4 className="font-semibold text-sm mb-2 text-text-primary">Buying (Mortgage)</h4>
-                  <p className="text-xs text-text-secondary">
-                    Property Value: {formatCurrency(final.mortgagePropertyValue)}
-                  </p>
-                  <p className="text-sm font-bold mt-1 text-text-primary">
-                    Net (after sale): {formatCurrency(final.mortgageNetPositionAfterSale)}
-                  </p>
+                  <div className="mb-4">
+                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Buying (Mortgage)</h4>
+                    <p className="text-xs text-text-secondary">
+                      Property Value: {formatCurrency(final.mortgagePropertyValue)}
+                    </p>
+                    <p className="text-sm font-bold mt-1 text-text-primary">
+                      Net (after sale): {formatCurrency(final.mortgageNetPositionAfterSale)}
+                    </p>
+                  </div>
+
+                  <div className="mb-4 pb-4 border-b border-border">
+                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Renting + Investing</h4>
+                    <p className="text-xs text-text-secondary">
+                      Investment: {formatCurrency(final.rentInvestmentValue)}
+                    </p>
+                    <p className="text-sm font-bold mt-1 text-text-primary">
+                      Net (after CGT): {formatCurrency(final.rentNetPositionAfterTax)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-text-secondary mb-1">Winner:</p>
+                    <p className="text-lg font-bold text-accent">
+                      {advantageAfterTax > 0
+                        ? `Renting +${formatCurrency(Math.abs(advantageAfterTax))}`
+                        : `Buying +${formatCurrency(Math.abs(advantageAfterTax))}`}
+                    </p>
+                  </div>
                 </div>
-
-                <div className="mb-4 pb-4 border-b border-border">
-                  <h4 className="font-semibold text-sm mb-2 text-text-primary">Renting + Investing</h4>
-                  <p className="text-xs text-text-secondary">
-                    Investment: {formatCurrency(final.rentInvestmentValue)}
-                  </p>
-                  <p className="text-sm font-bold mt-1 text-text-primary">
-                    Net (after CGT): {formatCurrency(final.rentNetPositionAfterTax)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-text-secondary mb-1">Winner:</p>
-                  <p className="text-lg font-bold text-accent">
-                    {advantageAfterTax > 0
-                      ? `Renting +${formatCurrency(Math.abs(advantageAfterTax))}`
-                      : `Buying +${formatCurrency(Math.abs(advantageAfterTax))}`}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+        {breakEvenResults && (
+          <div className="mb-6 p-6 rounded-lg shadow-xl bg-card">
+            <button
+              onClick={() => setBreakEvenExpanded(!breakEvenExpanded)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <h3 className="text-xl font-semibold text-accent">Break-Even Analysis</h3>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className={`h-5 w-5 text-accent transition-transform ${breakEvenExpanded ? 'rotate-180' : ''}`}
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+            {breakEvenExpanded && (
+              <div className="mt-4 overflow-x-auto">
+                <p className="text-sm text-text-secondary mb-4">
+                  What parameter values would make buying and renting equally attractive?
+                </p>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 px-4 text-text-secondary">Metric</th>
+                      <th className="text-right py-2 px-4 text-text-secondary">Current</th>
+                      <th className="text-right py-2 px-4 text-text-secondary">Break-Even</th>
+                      <th className="text-left py-2 px-4 text-text-secondary">Interpretation</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {breakEvenResults.results.map((result) => (
+                      <tr key={result.metric} className="border-b border-border/50">
+                        <td className="py-2 px-4 text-text-primary font-semibold">
+                          {result.metric}
+                        </td>
+                        <td className="text-right py-2 px-4 text-text-primary">
+                          {result.metric === 'Monthly Rent'
+                            ? formatCurrency(result.currentValue)
+                            : `${result.currentValue.toFixed(2)}%`}
+                        </td>
+                        <td className="text-right py-2 px-4 text-accent font-semibold">
+                          {result.exists
+                            ? result.metric === 'Monthly Rent'
+                              ? formatCurrency(result.breakEvenValue!)
+                              : `${result.breakEvenValue!.toFixed(2)}%`
+                            : 'N/A'}
+                        </td>
+                        <td className="py-2 px-4 text-text-secondary text-xs">
+                          {result.interpretation}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </>
     );
   }
 
@@ -84,12 +154,13 @@ export default function ResultsSummary({
   if (!finalResult) return null;
 
   return (
-    <div className="p-6 rounded-lg shadow-xl mb-6 bg-card">
-      <h2 className="text-2xl font-semibold mb-6 text-accent">
-        After {timeHorizon} Years
-      </h2>
+    <>
+      <div className="p-6 rounded-lg shadow-xl mb-6 bg-card">
+        <h2 className="text-2xl font-semibold mb-6 text-accent">
+          After {timeHorizon} Years
+        </h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
         <div className="pr-6 md:border-r border-border">
           <h3 className="font-semibold text-lg mb-4 text-accent">
             Buying (Mortgage)
@@ -222,6 +293,70 @@ export default function ResultsSummary({
           </p>
         )}
       </div>
-    </div>
+      </div>
+      {breakEvenResults && (
+        <div className="mb-6 p-6 rounded-lg shadow-xl bg-card">
+          <button
+            onClick={() => setBreakEvenExpanded(!breakEvenExpanded)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <h3 className="text-xl font-semibold text-accent">Break-Even Analysis</h3>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className={`h-5 w-5 text-accent transition-transform ${breakEvenExpanded ? 'rotate-180' : ''}`}
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+          {breakEvenExpanded && (
+            <div className="mt-4 overflow-x-auto">
+              <p className="text-sm text-text-secondary mb-4">
+                What parameter values would make buying and renting equally attractive?
+              </p>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 px-4 text-text-secondary">Metric</th>
+                    <th className="text-right py-2 px-4 text-text-secondary">Current</th>
+                    <th className="text-right py-2 px-4 text-text-secondary">Break-Even</th>
+                    <th className="text-left py-2 px-4 text-text-secondary">Interpretation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {breakEvenResults.results.map((result) => (
+                    <tr key={result.metric} className="border-b border-border/50">
+                      <td className="py-2 px-4 text-text-primary font-semibold">
+                        {result.metric}
+                      </td>
+                      <td className="text-right py-2 px-4 text-text-primary">
+                        {result.metric === 'Monthly Rent'
+                          ? formatCurrency(result.currentValue)
+                          : `${result.currentValue.toFixed(2)}%`}
+                      </td>
+                      <td className="text-right py-2 px-4 text-accent font-semibold">
+                        {result.exists
+                          ? result.metric === 'Monthly Rent'
+                            ? formatCurrency(result.breakEvenValue!)
+                            : `${result.breakEvenValue!.toFixed(2)}%`
+                          : 'N/A'}
+                      </td>
+                      <td className="py-2 px-4 text-text-secondary text-xs">
+                        {result.interpretation}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }

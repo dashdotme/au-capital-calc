@@ -1,0 +1,277 @@
+import type { PropertyInputs, RentInputs, InvestmentInputs } from '../types';
+import { runComparison, isScenarioValue } from './calculations';
+
+export interface BreakEvenResult {
+  metric: string;
+  currentValue: number;
+  breakEvenValue: number | null;
+  exists: boolean;
+  currentFavorsBuy: boolean;
+  interpretation: string;
+}
+
+export interface BreakEvenResults {
+  results: BreakEvenResult[];
+  timeHorizon: number;
+}
+
+/**
+ * Calculate the wealth difference (Rent - Buy) at a specific parameter value
+ */
+function calculateDifference(
+  propertyInputs: PropertyInputs,
+  rentInputs: RentInputs,
+  investmentInputs: InvestmentInputs,
+  years: number,
+  metricKey: string,
+  value: number
+): number {
+  let modifiedPropertyInputs = { ...propertyInputs };
+  let modifiedRentInputs = { ...rentInputs };
+  let modifiedInvestmentInputs = { ...investmentInputs };
+
+  // Update the specific metric
+  switch (metricKey) {
+    case 'interestRate':
+      modifiedPropertyInputs = { ...propertyInputs, interestRate: value };
+      break;
+    case 'maintenanceRate':
+      modifiedPropertyInputs = { ...propertyInputs, maintenanceRate: value };
+      break;
+    case 'monthlyRent':
+      modifiedRentInputs = { ...rentInputs, monthlyRent: value };
+      break;
+    case 'rentIncreaseRate':
+      modifiedRentInputs = { ...rentInputs, rentIncreaseRate: value };
+      break;
+    case 'stockMarketReturn':
+      modifiedInvestmentInputs = { ...investmentInputs, stockMarketReturn: value };
+      break;
+    case 'propertyGrowthRate':
+      modifiedInvestmentInputs = { ...investmentInputs, propertyGrowthRate: value };
+      break;
+    case 'dividendYield':
+      modifiedInvestmentInputs = { ...investmentInputs, dividendYield: value };
+      break;
+  }
+
+  const results = runComparison(
+    modifiedPropertyInputs,
+    modifiedRentInputs,
+    modifiedInvestmentInputs,
+    years
+  );
+
+  const finalResult = results[results.length - 1];
+  return finalResult.rentNetPositionAfterTax - finalResult.mortgageNetPositionAfterSale;
+}
+
+/**
+ * Binary search to find the break-even value for a given metric
+ */
+function findBreakEven(
+  propertyInputs: PropertyInputs,
+  rentInputs: RentInputs,
+  investmentInputs: InvestmentInputs,
+  years: number,
+  metricKey: string,
+  minValue: number,
+  maxValue: number,
+  tolerance: number = 1000 // Within $1k is close enough
+): number | null {
+  const maxIterations = 50;
+  let iteration = 0;
+
+  // Check if break-even exists in range
+  const minDiff = calculateDifference(propertyInputs, rentInputs, investmentInputs, years, metricKey, minValue);
+  const maxDiff = calculateDifference(propertyInputs, rentInputs, investmentInputs, years, metricKey, maxValue);
+
+  // If same sign, no break-even in this range
+  if ((minDiff > 0 && maxDiff > 0) || (minDiff < 0 && maxDiff < 0)) {
+    return null;
+  }
+
+  let low = minValue;
+  let high = maxValue;
+
+  while (iteration < maxIterations && (high - low) > 0.01) {
+    const mid = (low + high) / 2;
+    const diff = calculateDifference(propertyInputs, rentInputs, investmentInputs, years, metricKey, mid);
+
+    if (Math.abs(diff) < tolerance) {
+      return mid;
+    }
+
+    // Standard binary search: we know minDiff and maxDiff have opposite signs
+    // If diff has same sign as minDiff, move low up; otherwise move high down
+    if ((diff > 0 && minDiff > 0) || (diff < 0 && minDiff < 0)) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+
+    iteration++;
+  }
+
+  return (low + high) / 2;
+}
+
+/**
+ * Get reasonable search range for a given metric
+ */
+function getSearchRange(metricKey: string, currentValue: number): [number, number] {
+  switch (metricKey) {
+    case 'interestRate':
+      return [0.5, 15]; // 0.5% to 15%
+    case 'maintenanceRate':
+      return [0, 5]; // 0% to 5%
+    case 'monthlyRent':
+      return [currentValue * 0.3, currentValue * 3]; // ±70% to 3x
+    case 'rentIncreaseRate':
+      return [0, 10]; // 0% to 10%
+    case 'stockMarketReturn':
+      return [-2, 20]; // -2% to 20%
+    case 'propertyGrowthRate':
+      return [-2, 15]; // -2% to 15%
+    case 'dividendYield':
+      return [0, 8]; // 0% to 8%
+    default:
+      return [0, 100];
+  }
+}
+
+/**
+ * Get metric label for display
+ */
+function getMetricLabel(metricKey: string): string {
+  switch (metricKey) {
+    case 'interestRate':
+      return 'Interest Rate';
+    case 'maintenanceRate':
+      return 'Maintenance Rate';
+    case 'monthlyRent':
+      return 'Monthly Rent';
+    case 'rentIncreaseRate':
+      return 'Rent Increase Rate';
+    case 'stockMarketReturn':
+      return 'Stock Market Return';
+    case 'propertyGrowthRate':
+      return 'Property Growth Rate';
+    case 'dividendYield':
+      return 'Dividend Yield';
+    default:
+      return metricKey;
+  }
+}
+
+/**
+ * Format value for display based on metric type
+ */
+function formatValue(metricKey: string, value: number): string {
+  if (metricKey === 'monthlyRent') {
+    return `$${Math.round(value).toLocaleString('en-AU')}`;
+  }
+  return `${value.toFixed(2)}%`;
+}
+
+/**
+ * Generate interpretation text
+ */
+function getInterpretation(
+  metricKey: string,
+  currentValue: number,
+  breakEvenValue: number | null,
+  currentFavorsBuy: boolean
+): string {
+  if (breakEvenValue === null) {
+    return currentFavorsBuy
+      ? `Buying is better across the entire plausible range`
+      : `Renting is better across the entire plausible range`;
+  }
+
+  const formattedBreakEven = formatValue(metricKey, breakEvenValue);
+  const formattedCurrent = formatValue(metricKey, currentValue);
+
+  if (currentFavorsBuy) {
+    if (currentValue < breakEvenValue) {
+      return `Currently ${formattedCurrent} favors buying. Renting becomes better above ${formattedBreakEven}`;
+    } else {
+      return `Currently ${formattedCurrent} favors buying. Renting becomes better below ${formattedBreakEven}`;
+    }
+  } else {
+    if (currentValue < breakEvenValue) {
+      return `Currently ${formattedCurrent} favors renting. Buying becomes better above ${formattedBreakEven}`;
+    } else {
+      return `Currently ${formattedCurrent} favors renting. Buying becomes better below ${formattedBreakEven}`;
+    }
+  }
+}
+
+/**
+ * Calculate break-even analysis for all key metrics
+ */
+export function calculateBreakEven(
+  propertyInputs: PropertyInputs,
+  rentInputs: RentInputs,
+  investmentInputs: InvestmentInputs,
+  years: number
+): BreakEvenResults {
+  // Get current baseline values
+  const currentInterestRate = isScenarioValue(propertyInputs.interestRate)
+    ? propertyInputs.interestRate.baseline
+    : propertyInputs.interestRate;
+  const currentRentIncrease = isScenarioValue(rentInputs.rentIncreaseRate)
+    ? rentInputs.rentIncreaseRate.baseline
+    : rentInputs.rentIncreaseRate;
+  const currentStockReturn = isScenarioValue(investmentInputs.stockMarketReturn)
+    ? investmentInputs.stockMarketReturn.baseline
+    : investmentInputs.stockMarketReturn;
+  const currentPropertyGrowth = isScenarioValue(investmentInputs.propertyGrowthRate)
+    ? investmentInputs.propertyGrowthRate.baseline
+    : investmentInputs.propertyGrowthRate;
+
+  // Get current difference to determine which strategy is currently favored
+  const baselineResults = runComparison(propertyInputs, rentInputs, investmentInputs, years);
+  const finalResult = baselineResults[baselineResults.length - 1];
+  const currentDifference = finalResult.rentNetPositionAfterTax - finalResult.mortgageNetPositionAfterSale;
+
+  const metrics = [
+    { key: 'interestRate', current: currentInterestRate },
+    { key: 'maintenanceRate', current: propertyInputs.maintenanceRate },
+    { key: 'monthlyRent', current: rentInputs.monthlyRent },
+    { key: 'rentIncreaseRate', current: currentRentIncrease },
+    { key: 'stockMarketReturn', current: currentStockReturn },
+    { key: 'propertyGrowthRate', current: currentPropertyGrowth },
+    { key: 'dividendYield', current: investmentInputs.dividendYield ?? 0 },
+  ];
+
+  const results: BreakEvenResult[] = metrics.map(({ key, current }) => {
+    const [min, max] = getSearchRange(key, current);
+    const breakEvenValue = findBreakEven(
+      propertyInputs,
+      rentInputs,
+      investmentInputs,
+      years,
+      key,
+      min,
+      max
+    );
+
+    const currentFavorsBuy = currentDifference < 0;
+    const interpretation = getInterpretation(key, current, breakEvenValue, currentFavorsBuy);
+
+    return {
+      metric: getMetricLabel(key),
+      currentValue: current,
+      breakEvenValue,
+      exists: breakEvenValue !== null,
+      currentFavorsBuy,
+      interpretation,
+    };
+  });
+
+  return {
+    results,
+    timeHorizon: years,
+  };
+}

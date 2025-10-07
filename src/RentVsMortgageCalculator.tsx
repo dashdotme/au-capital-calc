@@ -1,12 +1,15 @@
 import { useState, useMemo } from 'react';
-import type { PropertyInputs, RentInputs, InvestmentInputs } from './types';
+import type { PropertyInputs, RentInputs, InvestmentInputs, MonteCarloResults } from './types';
 import { calculateMortgagePayment, runComparison, runScenarioComparison, isScenarioValue } from './utils/calculations';
+import { calculateBreakEven } from './utils/breakeven';
+import { runMonteCarloSimulation } from './utils/monteCarlo';
 import PropertyInputsCard from './components/PropertyInputsCard';
 import RentInputsCard from './components/RentInputsCard';
 import InvestmentInputsCard from './components/InvestmentInputsCard';
 import ResultsSummary from './components/ResultsSummary';
 import ComparisonChart from './components/ComparisonChart';
 import ScenarioToggle from './components/ScenarioToggle';
+import MonteCarloView from './components/MonteCarloView';
 
 export default function RentVsMortgageCalculator() {
   const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>({
@@ -63,6 +66,8 @@ export default function RentVsMortgageCalculator() {
   const [timeHorizon, setTimeHorizon] = useState(30);
   const [scenarioMode, setScenarioMode] = useState(true);
   const [focusMetric, setFocusMetric] = useState<string | null>(null);
+  const [monteCarloResults, setMonteCarloResults] = useState<MonteCarloResults | null>(null);
+  const [monteCarloRunning, setMonteCarloRunning] = useState(false);
 
   const hasScenarioValues = useMemo(() => {
     return (
@@ -86,6 +91,29 @@ export default function RentVsMortgageCalculator() {
     }
     return null;
   }, [scenarioMode, hasScenarioValues, propertyInputs, rentInputs, investmentInputs, timeHorizon]);
+
+  const breakEvenResults = useMemo(() => {
+    return calculateBreakEven(propertyInputs, rentInputs, investmentInputs, timeHorizon);
+  }, [propertyInputs, rentInputs, investmentInputs, timeHorizon]);
+
+  const handleRunMonteCarlo = async () => {
+    setMonteCarloRunning(true);
+    // Use setTimeout to allow UI to update before heavy computation
+    setTimeout(() => {
+      try {
+        const results = runMonteCarloSimulation(
+          propertyInputs,
+          rentInputs,
+          investmentInputs,
+          timeHorizon,
+          5000
+        );
+        setMonteCarloResults(results);
+      } finally {
+        setMonteCarloRunning(false);
+      }
+    }, 100);
+  };
 
   const loanAmount = propertyInputs.propertyPrice - propertyInputs.deposit;
   const interestRateForPayment = isScenarioValue(propertyInputs.interestRate)
@@ -138,6 +166,7 @@ export default function RentVsMortgageCalculator() {
           <ResultsSummary
             timeHorizon={timeHorizon}
             scenarioResults={results}
+            breakEvenResults={breakEvenResults}
           />
           <ComparisonChart scenarioResults={results} />
         </>
@@ -154,10 +183,49 @@ export default function RentVsMortgageCalculator() {
               singleResults[singleResults.length - 1].rentNetPositionAfterTax -
               singleResults[singleResults.length - 1].mortgageNetPositionAfterSale
             }
+            breakEvenResults={breakEvenResults}
           />
           <ComparisonChart results={singleResults} />
         </>
       ) : null}
+
+      {/* Monte Carlo Section */}
+      <div className="p-6 rounded-lg shadow-xl bg-card border-l-4 border-purple-500 mb-6">
+        <h2 className="text-xl font-semibold mb-4 text-accent">Monte Carlo Simulation</h2>
+        <p className="text-sm text-text-secondary mb-4">
+          Run thousands of simulations with varying market conditions to understand the probability distribution of outcomes.
+          This analysis accounts for correlations between interest rates, stock returns, property growth, and rent increases.
+        </p>
+        {!monteCarloResults ? (
+          <button
+            onClick={handleRunMonteCarlo}
+            disabled={monteCarloRunning}
+            className="px-6 py-3 bg-accent text-white font-semibold rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {monteCarloRunning ? 'Running 5,000 Simulations...' : 'Run Monte Carlo Analysis'}
+          </button>
+        ) : (
+          <div>
+            <button
+              onClick={handleRunMonteCarlo}
+              disabled={monteCarloRunning}
+              className="px-6 py-3 bg-accent/70 text-white font-semibold rounded-lg hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-4"
+            >
+              {monteCarloRunning ? 'Running...' : 'Re-run Analysis'}
+            </button>
+            <button
+              onClick={() => setMonteCarloResults(null)}
+              className="ml-4 px-6 py-3 bg-card border border-border text-text-primary font-semibold rounded-lg hover:bg-card/80 transition-colors"
+            >
+              Clear Results
+            </button>
+          </div>
+        )}
+      </div>
+
+      {monteCarloResults && (
+        <MonteCarloView results={monteCarloResults} timeHorizon={timeHorizon} />
+      )}
     </div>
   );
 }
