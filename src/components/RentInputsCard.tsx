@@ -1,6 +1,7 @@
-import type { RentInputs, ScenarioValue } from '../types';
+import type { PropertyInputs, RentInputs, InvestmentInputs, ScenarioValue } from '../types';
 import InputField from './InputField';
 import MultiInput from './MultiInput';
+import FocusAnalysis from './FocusAnalysis';
 import { isScenarioValue } from '../utils/calculations';
 
 interface RentInputsCardProps {
@@ -8,6 +9,14 @@ interface RentInputsCardProps {
   onChange: (inputs: RentInputs) => void;
   monthlySavings: number;
   scenarioMode: boolean;
+  focusMetric: string | null;
+  onFocusMetric: (metric: string | null) => void;
+  allInputs: {
+    propertyInputs: PropertyInputs;
+    rentInputs: RentInputs;
+    investmentInputs: InvestmentInputs;
+    timeHorizon: number;
+  };
 }
 
 export default function RentInputsCard({
@@ -15,9 +24,16 @@ export default function RentInputsCard({
   onChange,
   monthlySavings,
   scenarioMode,
+  focusMetric,
+  onFocusMetric,
+  allInputs,
 }: RentInputsCardProps) {
   const handleRentIncreaseRateChange = (value: number | ScenarioValue) => {
     onChange({ ...inputs, rentIncreaseRate: value });
+  };
+
+  const handleFocusMode = (metric: string) => {
+    onFocusMetric(focusMetric === metric ? null : metric);
   };
 
   return (
@@ -28,7 +44,18 @@ export default function RentInputsCard({
         label="Monthly Rent"
         value={inputs.monthlyRent}
         onChange={(monthlyRent) => onChange({ ...inputs, monthlyRent })}
+        onFocusMode={() => handleFocusMode('monthlyRent')}
       />
+
+      {focusMetric === 'monthlyRent' && (
+        <FocusAnalysis
+          metricKey="monthlyRent"
+          propertyInputs={allInputs.propertyInputs}
+          rentInputs={allInputs.rentInputs}
+          investmentInputs={allInputs.investmentInputs}
+          timeHorizon={allInputs.timeHorizon}
+        />
+      )}
 
       {scenarioMode ? (
         <MultiInput
@@ -39,12 +66,24 @@ export default function RentInputsCard({
               : { pessimistic: inputs.rentIncreaseRate, baseline: inputs.rentIncreaseRate, optimistic: inputs.rentIncreaseRate }
           }
           onChange={handleRentIncreaseRateChange}
+          onFocusMode={() => handleFocusMode('rentIncreaseRate')}
         />
       ) : (
         <InputField
           label="Annual Rent Increase (%)"
           value={isScenarioValue(inputs.rentIncreaseRate) ? inputs.rentIncreaseRate.baseline : inputs.rentIncreaseRate}
           onChange={(rentIncreaseRate) => onChange({ ...inputs, rentIncreaseRate })}
+          onFocusMode={() => handleFocusMode('rentIncreaseRate')}
+        />
+      )}
+
+      {focusMetric === 'rentIncreaseRate' && (
+        <FocusAnalysis
+          metricKey="rentIncreaseRate"
+          propertyInputs={allInputs.propertyInputs}
+          rentInputs={allInputs.rentInputs}
+          investmentInputs={allInputs.investmentInputs}
+          timeHorizon={allInputs.timeHorizon}
         />
       )}
 

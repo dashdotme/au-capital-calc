@@ -1,6 +1,7 @@
-import type { InvestmentInputs, ScenarioValue } from '../types';
+import type { PropertyInputs, RentInputs, InvestmentInputs, ScenarioValue } from '../types';
 import InputField from './InputField';
 import MultiInput from './MultiInput';
+import FocusAnalysis from './FocusAnalysis';
 import { isScenarioValue } from '../utils/calculations';
 
 interface InvestmentInputsCardProps {
@@ -9,6 +10,14 @@ interface InvestmentInputsCardProps {
   timeHorizon: number;
   onTimeHorizonChange: (years: number) => void;
   scenarioMode: boolean;
+  focusMetric: string | null;
+  onFocusMetric: (metric: string | null) => void;
+  allInputs: {
+    propertyInputs: PropertyInputs;
+    rentInputs: RentInputs;
+    investmentInputs: InvestmentInputs;
+    timeHorizon: number;
+  };
 }
 
 export default function InvestmentInputsCard({
@@ -17,6 +26,9 @@ export default function InvestmentInputsCard({
   timeHorizon,
   onTimeHorizonChange,
   scenarioMode,
+  focusMetric,
+  onFocusMetric,
+  allInputs,
 }: InvestmentInputsCardProps) {
   const handleStockMarketReturnChange = (value: number | ScenarioValue) => {
     onChange({ ...inputs, stockMarketReturn: value });
@@ -24,6 +36,10 @@ export default function InvestmentInputsCard({
 
   const handlePropertyGrowthRateChange = (value: number | ScenarioValue) => {
     onChange({ ...inputs, propertyGrowthRate: value });
+  };
+
+  const handleFocusMode = (metric: string) => {
+    onFocusMetric(focusMetric === metric ? null : metric);
   };
 
   return (
@@ -39,12 +55,24 @@ export default function InvestmentInputsCard({
               : { pessimistic: inputs.stockMarketReturn, baseline: inputs.stockMarketReturn, optimistic: inputs.stockMarketReturn }
           }
           onChange={handleStockMarketReturnChange}
+          onFocusMode={() => handleFocusMode('stockMarketReturn')}
         />
       ) : (
         <InputField
           label="Stock Market Return (% p.a.)"
           value={isScenarioValue(inputs.stockMarketReturn) ? inputs.stockMarketReturn.baseline : inputs.stockMarketReturn}
           onChange={(stockMarketReturn) => onChange({ ...inputs, stockMarketReturn })}
+          onFocusMode={() => handleFocusMode('stockMarketReturn')}
+        />
+      )}
+
+      {focusMetric === 'stockMarketReturn' && (
+        <FocusAnalysis
+          metricKey="stockMarketReturn"
+          propertyInputs={allInputs.propertyInputs}
+          rentInputs={allInputs.rentInputs}
+          investmentInputs={allInputs.investmentInputs}
+          timeHorizon={allInputs.timeHorizon}
         />
       )}
 
@@ -53,7 +81,18 @@ export default function InvestmentInputsCard({
         value={inputs.dividendYield ?? 0}
         onChange={(dividendYield) => onChange({ ...inputs, dividendYield })}
         helpText="ASX average ~4%, US markets ~1.5 - 2%"
+        onFocusMode={() => handleFocusMode('dividendYield')}
       />
+
+      {focusMetric === 'dividendYield' && (
+        <FocusAnalysis
+          metricKey="dividendYield"
+          propertyInputs={allInputs.propertyInputs}
+          rentInputs={allInputs.rentInputs}
+          investmentInputs={allInputs.investmentInputs}
+          timeHorizon={allInputs.timeHorizon}
+        />
+      )}
 
       <InputField
         label="Franking Level (%)"
@@ -85,12 +124,24 @@ export default function InvestmentInputsCard({
               : { pessimistic: inputs.propertyGrowthRate, baseline: inputs.propertyGrowthRate, optimistic: inputs.propertyGrowthRate }
           }
           onChange={handlePropertyGrowthRateChange}
+          onFocusMode={() => handleFocusMode('propertyGrowthRate')}
         />
       ) : (
         <InputField
           label="Property Growth Rate (% p.a.)"
           value={isScenarioValue(inputs.propertyGrowthRate) ? inputs.propertyGrowthRate.baseline : inputs.propertyGrowthRate}
           onChange={(propertyGrowthRate) => onChange({ ...inputs, propertyGrowthRate })}
+          onFocusMode={() => handleFocusMode('propertyGrowthRate')}
+        />
+      )}
+
+      {focusMetric === 'propertyGrowthRate' && (
+        <FocusAnalysis
+          metricKey="propertyGrowthRate"
+          propertyInputs={allInputs.propertyInputs}
+          rentInputs={allInputs.rentInputs}
+          investmentInputs={allInputs.investmentInputs}
+          timeHorizon={allInputs.timeHorizon}
         />
       )}
 

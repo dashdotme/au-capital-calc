@@ -341,3 +341,56 @@ export function runScenarioComparison(
 
   return results;
 }
+
+export interface FocusResults {
+  baseline: YearlySnapshot[];
+  scenarios: YearlySnapshot[][];
+}
+
+export function runFocusComparison(
+  propertyInputs: PropertyInputs,
+  rentInputs: RentInputs,
+  investmentInputs: InvestmentInputs,
+  years: number,
+  metricKey: string,
+  values: number[]
+): FocusResults {
+  // Run baseline for the opposite strategy
+  const baseline = runComparison(propertyInputs, rentInputs, investmentInputs, years);
+
+  // Run scenarios for each of the 5 values
+  const scenarios = values.map((value) => {
+    // Create modified inputs based on the metric
+    let modifiedPropertyInputs = { ...propertyInputs };
+    let modifiedRentInputs = { ...rentInputs };
+    let modifiedInvestmentInputs = { ...investmentInputs };
+
+    switch (metricKey) {
+      case 'interestRate':
+        modifiedPropertyInputs = { ...propertyInputs, interestRate: value };
+        break;
+      case 'maintenanceRate':
+        modifiedPropertyInputs = { ...propertyInputs, maintenanceRate: value };
+        break;
+      case 'monthlyRent':
+        modifiedRentInputs = { ...rentInputs, monthlyRent: value };
+        break;
+      case 'rentIncreaseRate':
+        modifiedRentInputs = { ...rentInputs, rentIncreaseRate: value };
+        break;
+      case 'stockMarketReturn':
+        modifiedInvestmentInputs = { ...investmentInputs, stockMarketReturn: value };
+        break;
+      case 'propertyGrowthRate':
+        modifiedInvestmentInputs = { ...investmentInputs, propertyGrowthRate: value };
+        break;
+      case 'dividendYield':
+        modifiedInvestmentInputs = { ...investmentInputs, dividendYield: value };
+        break;
+    }
+
+    return runComparison(modifiedPropertyInputs, modifiedRentInputs, modifiedInvestmentInputs, years);
+  });
+
+  return { baseline, scenarios };
+}

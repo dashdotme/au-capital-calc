@@ -62,6 +62,7 @@ export default function RentVsMortgageCalculator() {
 
   const [timeHorizon, setTimeHorizon] = useState(30);
   const [scenarioMode, setScenarioMode] = useState(true);
+  const [focusMetric, setFocusMetric] = useState<string | null>(null);
 
   const hasScenarioValues = useMemo(() => {
     return (
@@ -108,12 +109,18 @@ export default function RentVsMortgageCalculator() {
           onChange={setPropertyInputs}
           monthlyPayment={monthlyMortgage}
           scenarioMode={scenarioMode}
+          focusMetric={focusMetric}
+          onFocusMetric={setFocusMetric}
+          allInputs={{ propertyInputs, rentInputs, investmentInputs, timeHorizon }}
         />
         <RentInputsCard
           inputs={rentInputs}
           onChange={setRentInputs}
           monthlySavings={monthlyMortgage - rentInputs.monthlyRent}
           scenarioMode={scenarioMode}
+          focusMetric={focusMetric}
+          onFocusMetric={setFocusMetric}
+          allInputs={{ propertyInputs, rentInputs, investmentInputs, timeHorizon }}
         />
         <InvestmentInputsCard
           inputs={investmentInputs}
@@ -121,6 +128,9 @@ export default function RentVsMortgageCalculator() {
           timeHorizon={timeHorizon}
           onTimeHorizonChange={setTimeHorizon}
           scenarioMode={scenarioMode}
+          focusMetric={focusMetric}
+          onFocusMetric={setFocusMetric}
+          allInputs={{ propertyInputs, rentInputs, investmentInputs, timeHorizon }}
         />
       </div>
       {scenarioMode && hasScenarioValues && results ? (

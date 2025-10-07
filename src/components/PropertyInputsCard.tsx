@@ -1,6 +1,7 @@
-import type { PropertyInputs, ScenarioValue } from '../types';
+import type { PropertyInputs, RentInputs, InvestmentInputs, ScenarioValue } from '../types';
 import InputField from './InputField';
 import MultiInput from './MultiInput';
+import FocusAnalysis from './FocusAnalysis';
 import { isScenarioValue } from '../utils/calculations';
 
 interface PropertyInputsCardProps {
@@ -8,6 +9,14 @@ interface PropertyInputsCardProps {
   onChange: (inputs: PropertyInputs) => void;
   monthlyPayment: number;
   scenarioMode: boolean;
+  focusMetric: string | null;
+  onFocusMetric: (metric: string | null) => void;
+  allInputs: {
+    propertyInputs: PropertyInputs;
+    rentInputs: RentInputs;
+    investmentInputs: InvestmentInputs;
+    timeHorizon: number;
+  };
 }
 
 export default function PropertyInputsCard({
@@ -15,9 +24,16 @@ export default function PropertyInputsCard({
   onChange,
   monthlyPayment,
   scenarioMode,
+  focusMetric,
+  onFocusMetric,
+  allInputs,
 }: PropertyInputsCardProps) {
   const handleInterestRateChange = (value: number | ScenarioValue) => {
     onChange({ ...inputs, interestRate: value });
+  };
+
+  const handleFocusMode = (metric: string) => {
+    onFocusMetric(focusMetric === metric ? null : metric);
   };
 
   return (
@@ -45,12 +61,24 @@ export default function PropertyInputsCard({
               : { pessimistic: inputs.interestRate, baseline: inputs.interestRate, optimistic: inputs.interestRate }
           }
           onChange={handleInterestRateChange}
+          onFocusMode={() => handleFocusMode('interestRate')}
         />
       ) : (
         <InputField
           label="Interest Rate (%)"
           value={isScenarioValue(inputs.interestRate) ? inputs.interestRate.baseline : inputs.interestRate}
           onChange={(interestRate) => onChange({ ...inputs, interestRate })}
+          onFocusMode={() => handleFocusMode('interestRate')}
+        />
+      )}
+
+      {focusMetric === 'interestRate' && (
+        <FocusAnalysis
+          metricKey="interestRate"
+          propertyInputs={allInputs.propertyInputs}
+          rentInputs={allInputs.rentInputs}
+          investmentInputs={allInputs.investmentInputs}
+          timeHorizon={allInputs.timeHorizon}
         />
       )}
 
@@ -84,7 +112,18 @@ export default function PropertyInputsCard({
         label="Maintenance Rate (% p.a.)"
         value={inputs.maintenanceRate}
         onChange={(maintenanceRate) => onChange({ ...inputs, maintenanceRate })}
+        onFocusMode={() => handleFocusMode('maintenanceRate')}
       />
+
+      {focusMetric === 'maintenanceRate' && (
+        <FocusAnalysis
+          metricKey="maintenanceRate"
+          propertyInputs={allInputs.propertyInputs}
+          rentInputs={allInputs.rentInputs}
+          investmentInputs={allInputs.investmentInputs}
+          timeHorizon={allInputs.timeHorizon}
+        />
+      )}
 
       <InputField
         label="Council Rates (annual)"
