@@ -18,7 +18,7 @@ export default function RentVsMortgageCalculator() {
       baseline: 4.5,
       optimistic: 3.5,
     },
-    stampDuty: 0,
+    stampDuty: 30000,
     otherPurchaseCosts: 10000,
     maintenanceRate: 1.0,
     councilRates: 2500,

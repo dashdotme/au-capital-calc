@@ -99,6 +99,19 @@ export default function PropertyInputsCard({
         label="Stamp Duty"
         value={inputs.stampDuty}
         onChange={(stampDuty) => onChange({ ...inputs, stampDuty })}
+        helpText={
+          <>
+            State tax on property purchase (minimal for new builds, ~3-5% for established).{' '}
+            <a
+              href="https://www.commbank.com.au/digital/home-buying/calculator/stamp-duty-calculator"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-accent"
+            >
+              Calculator here.
+            </a>
+          </>
+        }
       />
 
       <InputField

@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 interface InputFieldProps {
   label: string;
   value: number;
   onChange: (value: number) => void;
-  helpText?: string;
+  helpText?: ReactNode;
   onFocusMode?: () => void;
 }
 

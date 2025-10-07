@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 export interface ScenarioValue {
   pessimistic: number;
@@ -10,7 +10,7 @@ interface MultiInputProps {
   label: string;
   value: ScenarioValue;
   onChange: (value: ScenarioValue) => void;
-  helpText?: string;
+  helpText?: ReactNode;
   onFocusMode?: () => void;
 }
 
