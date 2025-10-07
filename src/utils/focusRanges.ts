@@ -49,8 +49,8 @@ export function calculateFocusRange(metricKey: string, baselineValue: number): F
         extremeLow: 0.5,
         moderateLow: 0.75,
         baseline: baselineValue,
-        moderateHigh: 1.5,
-        extremeHigh: 2,
+        moderateHigh: 1.75,
+        extremeHigh: 2.5,
       };
 
     case 'dividendYield':
@@ -59,7 +59,7 @@ export function calculateFocusRange(metricKey: string, baselineValue: number): F
         moderateLow: 1,
         baseline: baselineValue,
         moderateHigh: 3,
-        extremeHigh: 5,
+        extremeHigh: 4,
       };
 
     case 'monthlyRent':
