@@ -52,7 +52,7 @@ export default function InvestmentInputsCard({
         label="Dividend Yield (% p.a.)"
         value={inputs.dividendYield ?? 0}
         onChange={(dividendYield) => onChange({ ...inputs, dividendYield })}
-        helpText="ASX average ~4%, US markets ~1.5-2%, set to 0 for no dividends"
+        helpText="ASX average ~4%, US markets ~1.5 - 2%"
       />
 
       <InputField
@@ -105,7 +105,7 @@ export default function InvestmentInputsCard({
         label="Stock Transaction Costs (%)"
         value={inputs.stockTransactionCost}
         onChange={(stockTransactionCost) => onChange({ ...inputs, stockTransactionCost })}
-        helpText="Typical: 0.1-0.2% for index funds, 0.5%+ for active trading. Higher if investing abroad. Applied to each monthly contribution."
+        helpText="Typical: 0.1 - 0.2% for index funds, 0.5%+ for active trading. Higher if investing abroad. Applied to each monthly contribution."
       />
 
       <label className="block mb-4">

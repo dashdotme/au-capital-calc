@@ -16,18 +16,13 @@ interface ComparisonChartProps {
 }
 
 export default function ComparisonChart({ results, scenarioResults }: ComparisonChartProps) {
-  // If we have scenario results, combine all data points for the chart
   if (scenarioResults) {
-    // Merge all scenario data into a single array for the chart
     const combinedData = scenarioResults.baseline.map((baselinePoint, index) => ({
       year: baselinePoint.year,
-      // Pessimistic scenario
       pessimisticBuy: scenarioResults.pessimistic[index].mortgageNetPositionAfterSale,
       pessimisticRent: scenarioResults.pessimistic[index].rentNetPositionAfterTax,
-      // Baseline scenario
       baselineBuy: baselinePoint.mortgageNetPositionAfterSale,
       baselineRent: baselinePoint.rentNetPositionAfterTax,
-      // Optimistic scenario
       optimisticBuy: scenarioResults.optimistic[index].mortgageNetPositionAfterSale,
       optimisticRent: scenarioResults.optimistic[index].rentNetPositionAfterTax,
     }));
