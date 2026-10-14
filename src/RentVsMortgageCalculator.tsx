@@ -29,6 +29,7 @@ import RiskView from './components/RiskView';
 import GapExplainer from './components/GapExplainer';
 import Affordability from './components/Affordability';
 import SavedScenarios, { type SavedScenario } from './components/SavedScenarios';
+import PrintReport from './components/PrintReport';
 import PortfolioComparison from './components/PortfolioComparison';
 import { PORTFOLIOS, applyPortfolio } from './portfolios';
 import { decodeState, encodeState, type SharedState } from './utils/shareState';
@@ -305,8 +306,15 @@ export default function RentVsMortgageCalculator() {
   );
   const buyWins = final.rentNetPositionAfterTax < final.mortgageNetPositionAfterSale;
 
+  const printIcon = (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <path d="M4.5 6V2.5h7V6M4.5 11.5h-2v-5h11v5h-2M4.5 9.5h7v4h-7z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+
   return (
-    <div className="min-h-screen bg-ground pb-24 text-ink lg:pb-0">
+    <>
+    <div className="min-h-screen bg-ground pb-24 text-ink lg:pb-0 print:hidden">
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <div className="flex w-full items-center gap-4 sm:w-auto">
@@ -338,6 +346,14 @@ export default function RentVsMortgageCalculator() {
               ) : (
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M6.5 9.5a3 3 0 004.2 0l2.3-2.3a3 3 0 00-4.2-4.2L7.6 4.2M9.5 6.5a3 3 0 00-4.2 0L3 8.8a3 3 0 004.2 4.2l1.2-1.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
               )}
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              aria-label="Export PDF"
+              className="flex h-10 w-10 items-center justify-center rounded-lg border border-line text-ink-2 hover:text-ink sm:hidden"
+            >
+              {printIcon}
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -371,6 +387,14 @@ export default function RentVsMortgageCalculator() {
               aria-live="polite"
             >
               {linkCopied ? 'Link copied' : 'Copy link'}
+            </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="hidden min-h-[42px] items-center gap-2 rounded-lg border border-line px-3.5 text-[13px] text-ink-2 hover:border-line-strong hover:text-ink sm:inline-flex"
+            >
+              {printIcon}
+              Export PDF
             </button>
           </div>
         </div>
@@ -501,5 +525,17 @@ export default function RentVsMortgageCalculator() {
         </div>
       )}
     </div>
+    <div className="hidden print:block">
+      <PrintReport
+        state={currentState}
+        baseline={baseline}
+        scenarios={scenarios}
+        sellYear={sellYear}
+        crossoverYear={crossoverYear}
+        breakEvens={breakEvenResults.results}
+        monteCarlo={monteCarloStale ? null : monteCarloResults}
+      />
+    </div>
+    </>
   );
 }

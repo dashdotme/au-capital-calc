@@ -97,3 +97,25 @@
     animation: none;
   }
 }
+
+@page {
+  size: A4;
+  margin: 16mm;
+}
+
+@media print {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background: #fff;
+    color: #111827;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-section {
+    break-inside: avoid;
+  }
+}
