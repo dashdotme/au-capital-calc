@@ -9,6 +9,7 @@ import { formatAdvantage, formatCompactCurrency, formatCurrency, formatPercent }
 import { CITIES } from '../cities';
 import { PORTFOLIOS } from '../portfolios';
 import { PALETTES, niceTicks, yearTicks } from './chartTheme';
+import { DISCLAIMER } from '../site';
 
 // The printed report is always light, whatever the screen theme
 const SERIES = PALETTES.light.SERIES;
@@ -287,7 +288,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
         </p>
         <p className="m-0 mt-1">
           Both households start with the same savings and spend the same each month; the cheaper option invests the
-          difference. Estimates, not financial advice.
+          difference. {DISCLAIMER}
         </p>
       </footer>
     </article>

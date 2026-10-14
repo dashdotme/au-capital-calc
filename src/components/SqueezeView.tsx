@@ -174,6 +174,7 @@ export default function SqueezeView({
           with salt. It runs your current scenario through slower wages, the rate cuts that would likely follow, and profits
           drifting from pay packets to shareholders.
         </p>
+        <p className="m-0 text-sm font-medium text-ink-2">Every number here is an AI-generated estimate. Not financial advice.</p>
       </section>
 
       <section aria-label="Squeeze settings" className="card grid grid-cols-1 gap-8 px-5 py-6 sm:px-7 md:grid-cols-2">

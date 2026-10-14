@@ -20,6 +20,7 @@ import { AdornedInput } from './InputField';
 import SentencePill from './SentencePill';
 import GapExplainer from './GapExplainer';
 import { niceTicks, useChart, yearTicks } from './chartTheme';
+import { DISCLAIMER_SHORT } from '../site';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface SentenceViewProps {
@@ -206,7 +207,7 @@ export default function SentenceView({
   const toggle = (next: Panel) => setPanel(panel === next ? null : next);
   const actions: { id: Panel | 'risk' | 'more'; label: string; primary?: boolean }[] = [
     { id: 'more', label: 'More assumptions', primary: true },
-    { id: 'risk', label: 'Simulate 5,000 possible futures' },
+    { id: 'risk', label: 'Give me the odds' },
     { id: 'afford', label: 'Can I afford to buy?' },
     { id: 'markets', label: 'Try another investment' },
     { id: 'compare', label: 'Compare scenarios' },
@@ -261,6 +262,10 @@ export default function SentenceView({
             Net worth after selling everything and paying tax{realTerms ? ", in today's dollars" : ''}
           </span>
         </div>
+        <p className="m-0 inline-flex items-center gap-2 self-start rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] text-ink-2">
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M8 7.2v4M8 4.8v.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+          {DISCLAIMER_SHORT}
+        </p>
       </section>
 
       <section aria-label="If you sold earlier" className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface px-4 py-6 sm:px-8">

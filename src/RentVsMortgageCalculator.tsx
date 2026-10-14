@@ -27,6 +27,8 @@ import SentenceView from './components/SentenceView';
 import LedgerTable from './components/LedgerTable';
 import GuidedFlow from './components/GuidedFlow';
 import SqueezeView from './components/SqueezeView';
+import SiteFooter from './components/SiteFooter';
+import { DISCLAIMER_SHORT } from './site';
 import { ThemeContext, type Theme } from './components/chartTheme';
 import FocusAnalysis from './components/FocusAnalysis';
 import RiskView from './components/RiskView';
@@ -625,11 +627,13 @@ export default function RentVsMortgageCalculator() {
               {savedCard}
               <p className="m-0 max-w-3xl text-xs leading-relaxed text-muted">
                 Both households start with the same savings and spend the same each month. Whichever option is cheaper that
-                month invests the difference. Figures are estimates, not financial advice.
+                month invests the difference. {DISCLAIMER_SHORT}
               </p>
             </main>
           </div>
         )}
+
+        <SiteFooter />
 
         {view === 'ledger' && (
           <div className="fixed inset-x-0 bottom-0 z-10 flex gap-2.5 border-t border-line bg-ground/95 px-4 pt-3 pb-5 backdrop-blur lg:hidden">
