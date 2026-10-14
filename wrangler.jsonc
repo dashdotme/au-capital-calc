@@ -1,0 +1,8 @@
+{
+  // Static site: `npm run build` writes the app to dist/, which Workers serves as assets.
+  "name": "au-capital-calc",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}
