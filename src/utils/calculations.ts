@@ -52,12 +52,21 @@ class Portfolio {
   cash = 0;
   dividends = 0;
   frankingCredits = 0;
+  /** New money put in (excludes reinvested dividends), so growth = value - contributions */
+  contributions = 0;
   private readonly feeRate: number;
   private readonly taxRate: number;
 
   constructor(feeRate: number, taxRate: number) {
     this.feeRate = feeRate;
     this.taxRate = taxRate;
+  }
+
+  /** Add new savings to the portfolio. */
+  contribute(amount: number) {
+    if (amount <= 0) return;
+    this.contributions += amount;
+    this.buy(amount);
   }
 
   buy(amount: number) {
@@ -133,7 +142,7 @@ export function runComparison(
 
   const renter = new Portfolio(feeRate, marginalTaxRate);
   const buyer = new Portfolio(feeRate, marginalTaxRate);
-  renter.buy(startingCapital);
+  renter.contribute(startingCapital);
 
   let balance = loanAmount;
   let currentInterestRate = Number.NaN;
@@ -177,6 +186,8 @@ export function runComparison(
       mortgageInsurance: cumulativeOwnerInsurance,
       mortgageTotalInterest: totalInterest,
       mortgageAnnualCost,
+      mortgageContributions: buyer.contributions,
+      mortgageSaleCosts: sellingCosts + propertyCGT,
       rentTotalPaid: cumulativeRent,
       rentMovingCosts: cumulativeMovingCosts,
       rentInsurance: cumulativeRenterInsurance,
@@ -186,6 +197,7 @@ export function runComparison(
       rentDividends: renter.dividends,
       rentFrankingCredits: renter.frankingCredits,
       rentAnnualCost,
+      rentContributions: renter.contributions,
     });
   };
 
@@ -245,9 +257,9 @@ export function runComparison(
       renter.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
       buyer.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
       if (ownerCost > renterCost) {
-        renter.buy(ownerCost - renterCost);
+        renter.contribute(ownerCost - renterCost);
       } else {
-        buyer.buy(renterCost - ownerCost);
+        buyer.contribute(renterCost - ownerCost);
       }
 
       propertyValue *= 1 + monthlyPropertyGrowth;
@@ -295,9 +307,9 @@ const MONETARY_KEYS = [
   'mortgageEquity', 'mortgageTotalPaid', 'mortgagePropertyValue', 'mortgageLoanBalance',
   'mortgageInvestmentValue', 'mortgageNetPosition', 'mortgageNetPositionAfterSale',
   'mortgageMaintenance', 'mortgageRates', 'mortgageInsurance', 'mortgageTotalInterest',
-  'mortgageAnnualCost', 'rentTotalPaid', 'rentMovingCosts', 'rentInsurance',
+  'mortgageAnnualCost', 'mortgageContributions', 'mortgageSaleCosts', 'rentTotalPaid', 'rentMovingCosts', 'rentInsurance',
   'rentInvestmentValue', 'rentNetPosition', 'rentNetPositionAfterTax', 'rentDividends',
-  'rentFrankingCredits', 'rentAnnualCost',
+  'rentFrankingCredits', 'rentAnnualCost', 'rentContributions',
 ] as const satisfies readonly (keyof YearlySnapshot)[];
 
 /** Deflate every dollar figure to today's dollars. */

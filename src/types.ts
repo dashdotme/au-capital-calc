@@ -76,6 +76,10 @@ export interface YearlySnapshot {
   mortgageTotalInterest: number;
   /** Buyer cash outflow for housing during this year */
   mortgageAnnualCost: number;
+  /** Cumulative new savings the buyer has invested (excludes reinvested dividends) */
+  mortgageContributions: number;
+  /** Selling costs plus CGT if the home were sold this year */
+  mortgageSaleCosts: number;
   rentTotalPaid: number;
   rentMovingCosts: number;
   rentInsurance: number;
@@ -89,6 +93,8 @@ export interface YearlySnapshot {
   rentFrankingCredits: number;
   /** Renter cash outflow for housing during this year */
   rentAnnualCost: number;
+  /** Cumulative new savings the renter has invested, including the starting capital */
+  rentContributions: number;
 }
 
 export interface ScenarioResults {

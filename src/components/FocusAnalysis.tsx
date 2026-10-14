@@ -109,7 +109,7 @@ export default function FocusAnalysis({
         </ResponsiveContainer>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="text-right text-xs text-ink-2">

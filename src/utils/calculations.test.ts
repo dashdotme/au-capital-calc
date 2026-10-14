@@ -218,7 +218,7 @@ describe('share links', async () => {
   const { encodeState, decodeState } = await import('./shareState');
   const defaults = {
     property, rent, investment: { ...investment, portfolio: 'high-growth' },
-    horizon: 30, sellYear: null, scenarioMode: true, realTerms: false,
+    horizon: 30, sellYear: null, scenarioMode: true, realTerms: false, income: null,
   };
 
   it('round-trips state through the URL hash', () => {
@@ -232,5 +232,24 @@ describe('share links', async () => {
     const decoded = decodeState(`#${evil}`, defaults)!;
     expect(decoded.property.propertyPrice).toBe(property.propertyPrice);
     expect(decoded.horizon).toBe(60);
+  });
+});
+
+describe('gap explanation', async () => {
+  const { explainGap } = await import('./gap');
+
+  it('drivers add up exactly to the buy-minus-rent gap', () => {
+    for (const years of [1, 7, 30, 40]) {
+      const results = runComparison({ ...property, offsetAccountBalance: 50000, lmi: 8000 }, rent, investment, years);
+      const s = last(results);
+      const total = explainGap(s, { ...property, offsetAccountBalance: 50000, lmi: 8000 }).reduce((sum, d) => sum + d.amount, 0);
+      expect(total).toBeCloseTo(s.mortgageNetPositionAfterSale - s.rentNetPositionAfterTax, 2);
+    }
+  });
+
+  it('still adds up in today\'s dollars', () => {
+    const s = last(toRealTerms(runComparison(property, rent, investment, 20), 2.5));
+    const total = explainGap(s, property, 1.025 ** 20).reduce((sum, d) => sum + d.amount, 0);
+    expect(total).toBeCloseTo(s.mortgageNetPositionAfterSale - s.rentNetPositionAfterTax, 2);
   });
 });

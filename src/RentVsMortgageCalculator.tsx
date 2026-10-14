@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import type { InvestmentInputs, MonteCarloResults, PropertyInputs, RentInputs } from './types';
 import {
   calculateMortgagePayment,
@@ -10,6 +10,8 @@ import {
 } from './utils/calculations';
 import { calculateBreakEven } from './utils/breakeven';
 import { monteCarloToRealTerms, runMonteCarloSimulation } from './utils/monteCarlo';
+import type { MonteCarloRequest } from './utils/monteCarlo.worker';
+import { explainGap } from './utils/gap';
 import {
   DEFAULT_HORIZON,
   DEFAULT_INVESTMENT,
@@ -24,6 +26,9 @@ import OutcomeChart from './components/OutcomeChart';
 import { FlipList, MoneyBreakdown } from './components/ResultsDetail';
 import FocusAnalysis from './components/FocusAnalysis';
 import RiskView from './components/RiskView';
+import GapExplainer from './components/GapExplainer';
+import Affordability from './components/Affordability';
+import SavedScenarios, { type SavedScenario } from './components/SavedScenarios';
 import PortfolioComparison from './components/PortfolioComparison';
 import { PORTFOLIOS, applyPortfolio } from './portfolios';
 import { decodeState, encodeState, type SharedState } from './utils/shareState';
@@ -38,7 +43,31 @@ const DEFAULT_STATE: SharedState = {
   sellYear: null,
   scenarioMode: true,
   realTerms: false,
+  income: null,
 };
+
+const SAVED_KEY = 'rent-or-buy.saved.v1';
+
+/** Saved scenarios live in localStorage as share-link payloads, so they get the same validation. */
+function loadSaved(): SavedScenario[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAVED_KEY) ?? '[]') as { id: string; name: string; hash: string }[];
+    return raw.flatMap((item) => {
+      const state = decodeState(`#${item.hash}`, DEFAULT_STATE);
+      return state && typeof item.name === 'string' ? [{ id: String(item.id), name: item.name, state }] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function storeSaved(saved: SavedScenario[]) {
+  try {
+    localStorage.setItem(SAVED_KEY, JSON.stringify(saved.map((x) => ({ id: x.id, name: x.name, hash: encodeState(x.state) }))));
+  } catch {
+    // Storage unavailable (private mode, quota): saved scenarios last for this visit only
+  }
+}
 
 /** Accumulated effect of the user's recent edits on the rent-minus-buy advantage. */
 interface ChangeFlash {
@@ -87,6 +116,8 @@ export default function RentVsMortgageCalculator() {
   const [sellYearSetting, setSellYearSetting] = useState<number | null>(initial.sellYear);
   const [scenarioMode, setScenarioMode] = useState(initial.scenarioMode);
   const [realTerms, setRealTerms] = useState(initial.realTerms);
+  const [income, setIncome] = useState<number | null>(initial.income);
+  const [saved, setSaved] = useState<SavedScenario[]>(loadSaved);
   const [changeFlash, setChangeFlash] = useState<ChangeFlash | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [focusMetric, setFocusMetric] = useState<string | null>(null);
@@ -98,18 +129,27 @@ export default function RentVsMortgageCalculator() {
   // null means "at the end of the horizon", so it follows horizon changes
   const sellYear = Math.min(sellYearSetting ?? timeHorizon, timeHorizon);
 
+  const currentState: SharedState = {
+    property: propertyInputs,
+    rent: rentInputs,
+    investment: investmentInputs,
+    horizon: timeHorizon,
+    sellYear: sellYearSetting,
+    scenarioMode,
+    realTerms,
+    income,
+  };
+  const currentHash = encodeState(currentState);
   useEffect(() => {
-    const hash = encodeState({
-      property: propertyInputs,
-      rent: rentInputs,
-      investment: investmentInputs,
-      horizon: timeHorizon,
-      sellYear: sellYearSetting,
-      scenarioMode,
-      realTerms,
-    });
-    window.history.replaceState(null, '', `#${hash}`);
-  }, [propertyInputs, rentInputs, investmentInputs, timeHorizon, sellYearSetting, scenarioMode, realTerms]);
+    window.history.replaceState(null, '', `#${currentHash}`);
+  }, [currentHash]);
+
+  // Heavy derived views (break-even search, scenarios, portfolio comparison) follow a
+  // deferred copy of the inputs so typing stays responsive on slower devices.
+  const deferredProperty = useDeferredValue(propertyInputs);
+  const deferredRent = useDeferredValue(rentInputs);
+  const deferredInvestment = useDeferredValue(investmentInputs);
+  const deferredHorizon = useDeferredValue(timeHorizon);
   const inputsKey = JSON.stringify([propertyInputs, rentInputs, investmentInputs, timeHorizon]);
   const monteCarloStale = monteCarloRun !== null && monteCarloRun.inputsKey !== inputsKey;
 
@@ -118,16 +158,19 @@ export default function RentVsMortgageCalculator() {
     [propertyInputs, rentInputs, investmentInputs, timeHorizon]
   );
   const nominalScenarios = useMemo(
-    () => (scenarioMode ? runScenarioComparison(propertyInputs, rentInputs, investmentInputs, timeHorizon) : null),
-    [scenarioMode, propertyInputs, rentInputs, investmentInputs, timeHorizon]
+    () => (scenarioMode ? runScenarioComparison(deferredProperty, deferredRent, deferredInvestment, deferredHorizon) : null),
+    [scenarioMode, deferredProperty, deferredRent, deferredInvestment, deferredHorizon]
   );
+  const breakEvenYear = Math.min(sellYear, deferredHorizon);
   const breakEvenResults = useMemo(
-    () => calculateBreakEven(propertyInputs, rentInputs, investmentInputs, sellYear),
-    [propertyInputs, rentInputs, investmentInputs, sellYear]
+    () => calculateBreakEven(deferredProperty, deferredRent, deferredInvestment, breakEvenYear),
+    [deferredProperty, deferredRent, deferredInvestment, breakEvenYear]
   );
 
   const baseline = realTerms ? toRealTerms(nominalBaseline, inflationRate) : nominalBaseline;
-  const scenarios = nominalScenarios && realTerms
+  // While the deferred scenarios catch up after a horizon change, fall back to none
+  const scenariosInSync = nominalScenarios !== null && nominalScenarios.baseline.length === nominalBaseline.length;
+  const scenarios = !scenariosInSync ? null : nominalScenarios && realTerms
     ? {
         pessimistic: toRealTerms(nominalScenarios.pessimistic, inflationRate),
         baseline: toRealTerms(nominalScenarios.baseline, inflationRate),
@@ -142,24 +185,41 @@ export default function RentVsMortgageCalculator() {
       : monteCarloRun.results
     : null;
 
+  const workerRef = useRef<Worker | null>(null);
+  const requestRef = useRef(0);
+
   const runMonteCarlo = () => {
     setMonteCarloRunning(true);
-    // Let the "running" state paint before the heavy synchronous work
-    setTimeout(() => {
-      try {
-        const results = runMonteCarloSimulation(
-          propertyInputs,
-          rentInputs,
-          investmentInputs,
-          timeHorizon,
-          MONTE_CARLO_ITERATIONS
-        );
-        setMonteCarloRun({ results, inputsKey });
-      } finally {
-        setMonteCarloRunning(false);
-      }
-    }, 30);
+    const id = ++requestRef.current;
+    const keyAtRequest = inputsKey;
+    const finish = (results: MonteCarloResults) => {
+      if (id !== requestRef.current) return; // a newer run superseded this one
+      setMonteCarloRun({ results, inputsKey: keyAtRequest });
+      setMonteCarloRunning(false);
+    };
+    try {
+      workerRef.current ??= new Worker(new URL('./utils/monteCarlo.worker.ts', import.meta.url), { type: 'module' });
+      workerRef.current.onmessage = (event: MessageEvent<{ id: number; results: MonteCarloResults }>) => {
+        if (event.data.id === id) finish(event.data.results);
+      };
+      const request: MonteCarloRequest = {
+        id,
+        property: propertyInputs,
+        rent: rentInputs,
+        investment: investmentInputs,
+        years: timeHorizon,
+        iterations: MONTE_CARLO_ITERATIONS,
+      };
+      workerRef.current.postMessage(request);
+    } catch {
+      // No worker support: run inline after letting the "running" state paint
+      setTimeout(() => {
+        finish(runMonteCarloSimulation(propertyInputs, rentInputs, investmentInputs, timeHorizon, MONTE_CARLO_ITERATIONS));
+      }, 30);
+    }
   };
+
+  useEffect(() => () => workerRef.current?.terminate(), []);
 
   const openRisk = () => {
     setView('risk');
@@ -190,6 +250,28 @@ export default function RentVsMortgageCalculator() {
     if (next.r) setRentInputs(next.r);
     if (next.i) setInvestmentInputs(next.i);
     if (next.h !== undefined) setTimeHorizon(next.h);
+  };
+
+  const loadScenario = (scenario: SavedScenario) => {
+    const { state } = scenario;
+    updateInputs({ p: state.property, r: state.rent, i: state.investment, h: state.horizon });
+    setSellYearSetting(state.sellYear);
+    setScenarioMode(state.scenarioMode);
+    setRealTerms(state.realTerms);
+    setIncome(state.income);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const saveScenario = (name: string) => {
+    const next = [...saved, { id: String(Date.now()), name, state: currentState }];
+    setSaved(next);
+    storeSaved(next);
+  };
+
+  const deleteScenario = (id: string) => {
+    const next = saved.filter((x) => x.id !== id);
+    setSaved(next);
+    storeSaved(next);
   };
 
   const resetInputs = () => {
@@ -366,21 +448,33 @@ export default function RentVsMortgageCalculator() {
               sellYear={sellYear}
               onSellYearChange={(year) => setSellYearSetting(year >= timeHorizon ? null : year)}
             />
-            <PortfolioComparison
-              propertyInputs={propertyInputs}
-              rentInputs={rentInputs}
-              investmentInputs={investmentInputs}
-              timeHorizon={timeHorizon}
+            <GapExplainer
+              drivers={explainGap(final, propertyInputs, realTerms ? Math.pow(1 + inflationRate / 100, sellYear) : 1)}
               sellYear={sellYear}
-              onSelect={(id) => {
-                const preset = PORTFOLIOS.find((x) => x.id === id);
-                if (preset) updateInputs({ i: applyPortfolio(investmentInputs, preset) });
-              }}
             />
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               <MoneyBreakdown final={final} timeHorizon={sellYear} />
               <FlipList breakEvens={breakEvenResults.results} buyWins={buyWins} onExplore={openFocus} />
             </div>
+            <PortfolioComparison
+              propertyInputs={deferredProperty}
+              rentInputs={deferredRent}
+              investmentInputs={deferredInvestment}
+              timeHorizon={deferredHorizon}
+              sellYear={breakEvenYear}
+              onSelect={(id) => {
+                const preset = PORTFOLIOS.find((x) => x.id === id);
+                if (preset) updateInputs({ i: applyPortfolio(investmentInputs, preset) });
+              }}
+            />
+            <Affordability property={propertyInputs} income={income} onIncomeChange={setIncome} />
+            <SavedScenarios
+              saved={saved}
+              current={currentState}
+              onSave={saveScenario}
+              onLoad={loadScenario}
+              onDelete={deleteScenario}
+            />
             <p className="m-0 max-w-3xl text-xs leading-relaxed text-muted">
               Both households start with the same savings and spend the same each month. Whichever option is cheaper that
               month invests the difference. Figures are estimates, not financial advice.

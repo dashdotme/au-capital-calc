@@ -9,6 +9,8 @@ export interface SharedState {
   sellYear: number | null;
   scenarioMode: boolean;
   realTerms: boolean;
+  /** Household income before tax, for the affordability check */
+  income: number | null;
 }
 
 const HASH_KEY = 's';
@@ -73,6 +75,7 @@ export function decodeState(hash: string, defaults: SharedState): SharedState | 
       sellYear: isNumber(raw.sellYear) ? Math.max(1, Math.min(horizon, Math.round(raw.sellYear))) : null,
       scenarioMode: typeof raw.scenarioMode === 'boolean' ? raw.scenarioMode : defaults.scenarioMode,
       realTerms: typeof raw.realTerms === 'boolean' ? raw.realTerms : defaults.realTerms,
+      income: isNumber(raw.income) && raw.income > 0 ? raw.income : null,
     };
   } catch {
     return null;

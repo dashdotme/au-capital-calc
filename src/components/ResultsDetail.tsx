@@ -25,7 +25,7 @@ export function MoneyBreakdown({ final, timeHorizon }: { final: YearlySnapshot; 
   return (
     <section aria-label="Where the money ends up" className="card flex min-w-0 flex-col gap-3.5 px-5 py-6 sm:px-7">
       <h2 className="m-0 text-lg font-semibold">Where the money ends up</h2>
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="text-right text-xs text-ink-2">
