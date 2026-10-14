@@ -23,6 +23,8 @@ interface AssumptionsPanelProps {
   focusMetric: string | null;
   onFocusMetric: (metric: string | null) => void;
   monthlyRepayment: number;
+  /** Price-to-income note shown under the property growth input */
+  growthNote?: string;
 }
 
 const TAX_BRACKETS = [
@@ -60,6 +62,7 @@ export default function AssumptionsPanel({
   focusMetric,
   onFocusMetric,
   monthlyRepayment,
+  growthNote,
 }: AssumptionsPanelProps) {
   const p = propertyInputs;
   const r = rentInputs;
@@ -218,7 +221,7 @@ export default function AssumptionsPanel({
           (stockMarketReturn) => onPortfolioParam({ stockMarketReturn }), 'stockMarketReturn', 'percent',
           'Including dividends, before fees.')}
         {scenarioField('Property growth / year', inv.propertyGrowthRate,
-          (propertyGrowthRate) => onInvestmentChange({ ...inv, propertyGrowthRate }), 'propertyGrowthRate')}
+          (propertyGrowthRate) => onInvestmentChange({ ...inv, propertyGrowthRate }), 'propertyGrowthRate', 'percent', growthNote)}
         <label className="flex flex-col gap-1.5">
           <span className="text-[13px] text-ink-2">Income tax rate (incl. 2% Medicare)</span>
           <select

@@ -45,6 +45,8 @@ interface SentenceViewProps {
   affordability: ReactNode;
   savedScenarios: ReactNode;
   portfolioComparison: ReactNode;
+  /** Price-to-income warning, shown under the answer when growth looks stretched */
+  realityCheck?: ReactNode;
 }
 
 type Panel = 'afford' | 'compare' | 'markets' | null;
@@ -97,6 +99,7 @@ export default function SentenceView({
   affordability,
   savedScenarios,
   portfolioComparison,
+  realityCheck,
 }: SentenceViewProps) {
   const { INK, SERIES, axisProps, tooltipProps } = useChart();
   const wide = useMediaQuery('(min-width: 640px)');
@@ -266,6 +269,7 @@ export default function SentenceView({
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M8 7.2v4M8 4.8v.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
           {DISCLAIMER_SHORT}
         </p>
+        {realityCheck}
       </section>
 
       <section aria-label="If you sold earlier" className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface px-4 py-6 sm:px-8">

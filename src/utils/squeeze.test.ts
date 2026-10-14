@@ -62,3 +62,30 @@ describe('household simulation', () => {
     expect(r.forcedSaleMonth).not.toBeNull();
   });
 });
+
+describe('price-to-income check', async () => {
+  const { priceToIncome } = await import('./priceToIncome');
+  const valueAt = (growth: number, year: number) =>
+    runComparison(P, R, { ...I, propertyGrowthRate: growth }, 30)[year].mortgagePropertyValue;
+
+  it('uses the city median: Brisbane is about 9.3x today', () => {
+    expect(priceToIncome(P, R, valueAt(4, 30), 30).now).toBeCloseTo(9.29, 1);
+  });
+
+  it('does not warn on the default assumptions', () => {
+    const check = priceToIncome(P, R, valueAt(4, 30), 30);
+    expect(check.atSale).toBeGreaterThan(check.now);
+    expect(check.stretched).toBe(false);
+  });
+
+  it('warns when growth runs well ahead of incomes', () => {
+    const check = priceToIncome(P, R, valueAt(5.4, 30), 30);
+    expect(check.atSale).toBeGreaterThan(15);
+    expect(check.stretched).toBe(true);
+  });
+
+  it('keeps the multiple flat when prices grow with incomes', () => {
+    const check = priceToIncome(P, R, valueAt(3.5, 30), 30);
+    expect(check.atSale / check.now).toBeCloseTo(1, 1);
+  });
+});

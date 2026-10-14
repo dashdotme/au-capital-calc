@@ -3,6 +3,7 @@ import type { InvestmentInputs, MonteCarloResults, PropertyInputs, RentInputs } 
 import {
   calculateMortgagePayment,
   findBuyCrossoverYear,
+  isScenarioValue,
   resolveScenarioValue,
   runComparison,
   runScenarioComparison,
@@ -28,6 +29,8 @@ import LedgerTable from './components/LedgerTable';
 import GuidedFlow from './components/GuidedFlow';
 import SqueezeView from './components/SqueezeView';
 import SiteFooter from './components/SiteFooter';
+import PriceToIncomeCallout from './components/PriceToIncomeCallout';
+import { priceToIncome } from './utils/priceToIncome';
 import { DISCLAIMER_SHORT } from './site';
 import { ThemeContext, type Theme } from './components/chartTheme';
 import FocusAnalysis from './components/FocusAnalysis';
@@ -379,6 +382,27 @@ export default function RentVsMortgageCalculator() {
   const buyWins = final.rentNetPositionAfterTax < final.mortgageNetPositionAfterSale;
 
   const setSell = (year: number) => setSellYearSetting(year >= timeHorizon ? null : year);
+
+  // Price-to-income check on the growth assumption (nominal: incomes and prices in the same dollars)
+  const growthBaseline = resolveScenarioValue(investmentInputs.propertyGrowthRate, 'baseline');
+  const affordabilityCheck = priceToIncome(propertyInputs, rentInputs, nominalBaseline[sellYear].mortgagePropertyValue, sellYear);
+  const matchIncomes = () => {
+    const delta = affordabilityCheck.incomeGrowth - growthBaseline;
+    const shift = (v: number) => Math.round((v + delta) * 100) / 100;
+    const g = investmentInputs.propertyGrowthRate;
+    updateInputs({
+      i: {
+        ...investmentInputs,
+        propertyGrowthRate: isScenarioValue(g)
+          ? { pessimistic: shift(g.pessimistic), baseline: shift(g.baseline), optimistic: shift(g.optimistic) }
+          : shift(g),
+      },
+    });
+  };
+  const realityCheck = (
+    <PriceToIncomeCallout check={affordabilityCheck} sellYear={sellYear} propertyGrowth={growthBaseline} onMatchIncomes={matchIncomes} />
+  );
+  const growthNote = `${affordabilityCheck.atSale.toFixed(1)}× median household income in ${affordabilityCheck.area} by year ${sellYear} (${affordabilityCheck.now.toFixed(1)}× today).`;
   const deflator = realTerms ? Math.pow(1 + inflationRate / 100, sellYear) : 1;
   const drivers = explainGap(final, propertyInputs, deflator);
 
@@ -432,6 +456,7 @@ export default function RentVsMortgageCalculator() {
       focusMetric={focusMetric}
       onFocusMetric={openFocus}
       monthlyRepayment={monthlyRepayment}
+      growthNote={growthNote}
     />
   );
   const affordabilityCard = <Affordability property={propertyInputs} income={income} onIncomeChange={setIncome} />;
@@ -556,6 +581,7 @@ export default function RentVsMortgageCalculator() {
             affordability={affordabilityCard}
             savedScenarios={savedCard}
             portfolioComparison={portfolioCard}
+            realityCheck={realityCheck}
           />
         )}
 
@@ -582,6 +608,7 @@ export default function RentVsMortgageCalculator() {
                 {scenarioToggle}
                 {dollarToggle}
               </div>
+              {realityCheck}
               <LedgerTable
                 final={final}
                 property={propertyInputs}
