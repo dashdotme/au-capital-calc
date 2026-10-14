@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
-import { finalAdvantage, runComparison } from '../utils/calculations';
+import { runComparison } from '../utils/calculations';
 import { formatAdvantage } from '../utils/format';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
 
@@ -9,6 +9,7 @@ interface PortfolioComparisonProps {
   rentInputs: RentInputs;
   investmentInputs: InvestmentInputs;
   timeHorizon: number;
+  sellYear: number;
   onSelect: (id: string) => void;
 }
 
@@ -18,17 +19,16 @@ export default function PortfolioComparison({
   rentInputs,
   investmentInputs,
   timeHorizon,
+  sellYear,
   onSelect,
 }: PortfolioComparisonProps) {
   const rows = useMemo(
     () =>
-      PORTFOLIOS.map((preset) => ({
-        preset,
-        advantage: finalAdvantage(
-          runComparison(propertyInputs, rentInputs, applyPortfolio(investmentInputs, preset), timeHorizon)
-        ),
-      })),
-    [propertyInputs, rentInputs, investmentInputs, timeHorizon]
+      PORTFOLIOS.map((preset) => {
+        const s = runComparison(propertyInputs, rentInputs, applyPortfolio(investmentInputs, preset), timeHorizon)[sellYear];
+        return { preset, advantage: s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale };
+      }),
+    [propertyInputs, rentInputs, investmentInputs, timeHorizon, sellYear]
   );
   const scale = Math.max(...rows.map((r) => Math.abs(r.advantage)), 1);
 
@@ -37,7 +37,7 @@ export default function PortfolioComparison({
       <div className="flex flex-col gap-1">
         <h2 className="m-0 text-lg font-semibold">What if you invested somewhere else?</h2>
         <p className="m-0 text-[13px] text-ink-2">
-          Baseline result after {timeHorizon} years with each portfolio, using its own return, dividends, franking and
+          Baseline result after {sellYear} years with each portfolio, using its own return, dividends, franking and
           fees. Both households invest their surplus in the same portfolio.
         </p>
       </div>

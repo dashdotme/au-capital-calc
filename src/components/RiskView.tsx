@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { MonteCarloResults } from '../types';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { formatAdvantage, formatPercent } from '../utils/format';
 import { INK, MONO, SERIES, axisProps, gridProps, niceTicks, tooltipProps, yearTicks } from './chartTheme';
 
@@ -86,6 +87,7 @@ function SpreadStrip({ percentiles }: { percentiles: MonteCarloResults['percenti
 }
 
 export default function RiskView({ results, running, stale, timeHorizon, realTerms, onRerun }: RiskViewProps) {
+  const wide = useMediaQuery('(min-width: 640px)');
   if (!results) {
     return (
       <div className="card flex min-h-[320px] flex-col items-center justify-center gap-4 px-6 text-center">
@@ -252,7 +254,7 @@ export default function RiskView({ results, running, stale, timeHorizon, realTer
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={timing} margin={{ top: 24, right: 16, bottom: 4, left: 0 }}>
                 <CartesianGrid {...gridProps} />
-                <XAxis dataKey="year" {...axisProps} ticks={yearTicks(timeHorizon)} interval={0} tickFormatter={(y: number) => (y === 0 ? 'Year 0' : String(y))} />
+                <XAxis dataKey="year" {...axisProps} ticks={yearTicks(timeHorizon)} interval={0} tickFormatter={(y: number) => (y === 0 && wide ? 'Year 0' : String(y))} />
                 <YAxis {...axisProps} width={44} domain={[0, 1]} ticks={[0, 0.5, 1]} tickFormatter={(v: number) => formatPercent(v)} />
                 <ReferenceLine y={0.5} stroke={INK.muted} strokeDasharray="6 4" />
                 <Tooltip {...tooltipProps} labelFormatter={(y) => `Sell in year ${y}`}

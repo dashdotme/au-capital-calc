@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { InvestmentInputs, PropertyInputs, RentInputs, YearlySnapshot } from '../types';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { getMetricValue, runFocusComparison } from '../utils/calculations';
 import { calculateFocusRange, formatCompactValue, getMetricLabel, getMetricUnit } from '../utils/focusRanges';
 import { formatAdvantage, formatCompactCurrency } from '../utils/format';
@@ -26,6 +27,7 @@ export default function FocusAnalysis({
   timeHorizon,
   onClose,
 }: FocusAnalysisProps) {
+  const wide = useMediaQuery('(min-width: 640px)');
   const baselineValue = getMetricValue(propertyInputs, rentInputs, investmentInputs, metricKey);
   const defaultRange = calculateFocusRange(metricKey, baselineValue);
   const [sliderValues, setSliderValues] = useState<number[]>([
@@ -84,7 +86,7 @@ export default function FocusAnalysis({
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 4 }}>
             <CartesianGrid {...gridProps} />
-            <XAxis dataKey="year" {...axisProps} ticks={yearTicks(timeHorizon)} interval={0} tickFormatter={(y: number) => (y === 0 ? 'Year 0' : String(y))} />
+            <XAxis dataKey="year" {...axisProps} ticks={yearTicks(timeHorizon)} interval={0} tickFormatter={(y: number) => (y === 0 && wide ? 'Year 0' : String(y))} />
             <YAxis {...axisProps} width={64} tickFormatter={(v: number) => formatCompactCurrency(v)} />
             <ReferenceLine y={0} stroke={INK.muted} />
             <Tooltip

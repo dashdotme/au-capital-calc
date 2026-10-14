@@ -4,7 +4,11 @@ import { flipDistance, formatMetricValue } from '../utils/flip';
 
 interface VerdictProps {
   final: YearlySnapshot;
+  sellYear: number;
   timeHorizon: number;
+  onSellYearChange: (year: number) => void;
+  /** How much the user's latest edits moved the advantage (positive = toward renting) */
+  changeFlash: { delta: number; at: number } | null;
   crossoverYear: number | null;
   breakEvens: BreakEvenResult[];
   realTerms: boolean;
@@ -20,7 +24,16 @@ const PHRASES: Record<string, string> = {
   dividendYield: 'a dividend yield of',
 };
 
-export default function Verdict({ final, timeHorizon, crossoverYear, breakEvens, realTerms }: VerdictProps) {
+export default function Verdict({
+  final,
+  sellYear,
+  timeHorizon,
+  onSellYearChange,
+  changeFlash,
+  crossoverYear,
+  breakEvens,
+  realTerms,
+}: VerdictProps) {
   const buy = final.mortgageNetPositionAfterSale;
   const rent = final.rentNetPositionAfterTax;
   const advantage = rent - buy;
@@ -37,12 +50,14 @@ export default function Verdict({ final, timeHorizon, crossoverYear, breakEvens,
     .join(' or ');
 
   let timing: string;
-  if (buyWins && crossoverYear !== null) {
-    timing = `Buying takes the lead in year ${crossoverYear} and keeps it. Sell before then and renting wins.`;
+  if (crossoverYear !== null && sellYear >= crossoverYear) {
+    timing = `Buying takes the lead in year ${crossoverYear} and keeps it.`;
+  } else if (crossoverYear !== null) {
+    timing = `Buying only takes the lead in year ${crossoverYear}, so selling sooner favours renting.`;
   } else if (buyWins) {
-    timing = 'Buying finishes ahead, but the lead changes hands along the way.';
+    timing = 'Buying is ahead at this point, but the lead changes hands along the way.';
   } else {
-    timing = `Renting and investing stays ahead at the ${timeHorizon}-year mark.`;
+    timing = `Renting and investing is ahead at the ${sellYear}-year mark.`;
   }
   const sensitivity = nearest.length === 0
     ? 'No single assumption on its own would change the answer.'
@@ -58,9 +73,22 @@ export default function Verdict({ final, timeHorizon, crossoverYear, breakEvens,
   return (
     <section aria-label="Verdict" className="card flex flex-col gap-6 px-6 py-7 sm:px-8">
       <div className="flex flex-col gap-2">
-        <span className="eyebrow">
-          After {timeHorizon} years · baseline{realTerms ? " · today's dollars" : ''}
-        </span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label className="flex flex-wrap items-center gap-3">
+            <span className="eyebrow">If you sell after</span>
+            <input
+              type="range"
+              min={1}
+              max={timeHorizon}
+              value={sellYear}
+              onChange={(e) => onSellYearChange(Number(e.target.value))}
+              className="w-40 accent-[var(--color-ink)] sm:w-56"
+              aria-valuetext={`${sellYear} years`}
+            />
+            <span className="font-mono text-sm text-ink">{sellYear} {sellYear === 1 ? 'year' : 'years'}</span>
+          </label>
+          <span className="eyebrow">Baseline{realTerms ? " · today's dollars" : ''}</span>
+        </div>
         <h1 className="m-0 text-3xl leading-tight font-bold tracking-tight sm:text-[40px]">
           {buyWins ? 'Buying' : 'Renting and investing'} comes out ahead by{' '}
           <span className="font-mono font-medium whitespace-nowrap">{formatCurrency(Math.abs(advantage))}</span>
@@ -68,6 +96,19 @@ export default function Verdict({ final, timeHorizon, crossoverYear, breakEvens,
         <p className="m-0 max-w-2xl text-base leading-relaxed text-ink-2">
           {timing} {sensitivity}
         </p>
+        <div aria-live="polite" className="min-h-7">
+          {changeFlash && Math.abs(changeFlash.delta) >= 500 && (
+            <span
+              key={changeFlash.at}
+              className="change-flash inline-flex items-center gap-2 rounded-full border border-line-strong bg-raised px-3 py-1 text-[13px]"
+            >
+              <span aria-hidden className={`h-2 w-2 rounded-full ${changeFlash.delta > 0 ? 'bg-rent' : 'bg-buy'}`} />
+              Your change moved it{' '}
+              <span className="font-mono">{formatCompactCurrency(Math.abs(changeFlash.delta))}</span> toward{' '}
+              {changeFlash.delta > 0 ? 'renting' : 'buying'}
+            </span>
+          )}
+        </div>
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
         {rows.map((row) => (

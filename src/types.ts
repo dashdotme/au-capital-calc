@@ -20,6 +20,8 @@ export interface PropertyInputs {
   offsetAccountBalance?: number;
   /** Lenders mortgage insurance, capitalised into the loan (typically only when LVR > 80%) */
   lmi?: number;
+  /** Id of the city preset these values came from, if any */
+  location?: string;
 }
 
 export interface RentInputs {

@@ -4,6 +4,7 @@ import { formatAdvantage, formatCompactCurrency, formatCurrency, formatPercent }
 
 interface KeyFiguresProps {
   baseline: YearlySnapshot[];
+  sellYear: number;
   scenarioResults: ScenarioResults | null;
   crossoverYear: number | null;
   timeHorizon: number;
@@ -26,6 +27,7 @@ const tileClass = 'card flex flex-col gap-1.5 px-5 py-4 text-left';
 
 export default function KeyFigures({
   baseline,
+  sellYear,
   scenarioResults,
   crossoverYear,
   timeHorizon,
@@ -36,12 +38,12 @@ export default function KeyFigures({
   const ownMonthly = first.mortgageAnnualCost / 12;
   const rentMonthly = first.rentAnnualCost / 12;
   const gap = Math.abs(ownMonthly - rentMonthly);
-  const final = baseline[baseline.length - 1];
+  const final = baseline[sellYear];
 
   const advantages = scenarioResults
     ? [scenarioResults.pessimistic, scenarioResults.baseline, scenarioResults.optimistic].map((s) => {
-        const last = s[s.length - 1];
-        return last.rentNetPositionAfterTax - last.mortgageNetPositionAfterSale;
+        const atSale = s[sellYear];
+        return atSale.rentNetPositionAfterTax - atSale.mortgageNetPositionAfterSale;
       })
     : null;
 
@@ -74,7 +76,7 @@ export default function KeyFigures({
           <Tile
             label="Interest paid"
             value={formatCompactCurrency(final.mortgageTotalInterest)}
-            note={`Over ${timeHorizon} years, after the offset.`}
+            note={`Over ${sellYear} years, after the offset.`}
           />
         )}
       </div>

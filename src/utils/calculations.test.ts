@@ -213,3 +213,24 @@ describe('monte carlo', () => {
     expect(Math.abs(a.percentiles.p50 - det)).toBeLessThan(spread * 0.25);
   });
 });
+
+describe('share links', async () => {
+  const { encodeState, decodeState } = await import('./shareState');
+  const defaults = {
+    property, rent, investment: { ...investment, portfolio: 'high-growth' },
+    horizon: 30, sellYear: null, scenarioMode: true, realTerms: false,
+  };
+
+  it('round-trips state through the URL hash', () => {
+    const state = { ...defaults, property: { ...property, propertyPrice: 1234567 }, sellYear: 12, realTerms: true };
+    expect(decodeState(`#${encodeState(state)}`, defaults)).toEqual(state);
+  });
+
+  it('ignores malformed or hostile input', () => {
+    expect(decodeState('#s=not-base64!!', defaults)).toBeNull();
+    const evil = encodeState({ ...defaults, property: { ...property, propertyPrice: 'x' as unknown as number }, horizon: 1e9 });
+    const decoded = decodeState(`#${evil}`, defaults)!;
+    expect(decoded.property.propertyPrice).toBe(property.propertyPrice);
+    expect(decoded.horizon).toBe(60);
+  });
+});

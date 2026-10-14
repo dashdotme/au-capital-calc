@@ -80,3 +80,20 @@
     border-radius: 12px;
   }
 }
+
+@keyframes change-flash {
+  0% { opacity: 0; transform: translateY(4px); }
+  8% { opacity: 1; transform: none; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.change-flash {
+  animation: change-flash 5s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .change-flash {
+    animation: none;
+  }
+}

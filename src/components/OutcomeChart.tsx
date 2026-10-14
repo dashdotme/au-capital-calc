@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { ScenarioResults, YearlySnapshot } from '../types';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 import { formatAdvantage, formatCompactCurrency, formatCurrency } from '../utils/format';
 import { INK, SERIES, axisProps, gridProps, niceTicks, tooltipProps, yearTicks } from './chartTheme';
 
@@ -19,6 +20,8 @@ interface OutcomeChartProps {
   baseline: YearlySnapshot[];
   scenarioResults: ScenarioResults | null;
   crossoverYear: number | null;
+  sellYear: number;
+  onSellYearChange: (year: number) => void;
 }
 
 type View = 'advantage' | 'worth';
@@ -26,9 +29,9 @@ type View = 'advantage' | 'worth';
 const advantage = (s: YearlySnapshot) => s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale;
 
 /** Label only the last point of a line, to the right of the plot. */
-function endLabel(text: string, fill: string, lastIndex: number) {
+function endLabel(text: string, fill: string, lastIndex: number, show = true) {
   return function EndLabel(props: { x?: number | string; y?: number | string; index?: number }) {
-    if (props.index !== lastIndex) return null;
+    if (!show || props.index !== lastIndex) return null;
     return (
       <text x={Number(props.x) + 8} y={Number(props.y) + 4} fill={fill} fontSize={12}>
         {text}
@@ -45,8 +48,16 @@ function LineSample({ dash, color, width }: { dash?: string; color: string; widt
   );
 }
 
-export default function OutcomeChart({ baseline, scenarioResults, crossoverYear }: OutcomeChartProps) {
+export default function OutcomeChart({
+  baseline,
+  scenarioResults,
+  crossoverYear,
+  sellYear,
+  onSellYearChange,
+}: OutcomeChartProps) {
   const [view, setView] = useState<View>('advantage');
+  const wide = useMediaQuery('(min-width: 640px)');
+  const margin = { top: 28, right: wide ? 96 : 12, bottom: 4, left: 4 };
   const lastIndex = baseline.length - 1;
 
   const data = baseline.map((s, i) => ({
@@ -64,6 +75,16 @@ export default function OutcomeChart({ baseline, scenarioResults, crossoverYear 
   const yMax = ticks[ticks.length - 1];
   const xTicks = yearTicks(lastIndex);
 
+  // Clicking a year on either chart makes it the sell year (the data index is the year)
+  const handleClick = (state: { activeTooltipIndex?: number | string | null } | null) => {
+    const year = Number(state?.activeTooltipIndex);
+    if (Number.isFinite(year) && year >= 1) onSellYearChange(year);
+  };
+  const sellMarker = sellYear < lastIndex && (
+    <ReferenceLine x={sellYear} stroke={INK.secondary} strokeDasharray="2 3"
+      label={{ value: `Sell · year ${sellYear}`, position: 'top', fill: INK.primary, fontSize: 12, offset: 8 }} />
+  );
+
   const tabs: { id: View; label: string }[] = [
     { id: 'advantage', label: "Who's ahead" },
     { id: 'worth', label: 'Net worth' },
@@ -72,9 +93,12 @@ export default function OutcomeChart({ baseline, scenarioResults, crossoverYear 
   return (
     <section aria-label="Outcome over time" className="card flex flex-col gap-4 px-5 py-6 sm:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="m-0 text-lg font-semibold">
-          {view === 'advantage' ? 'Who is ahead, by the year you sell' : 'Net worth if you sold that year'}
-        </h2>
+        <div className="flex flex-col gap-0.5">
+          <h2 className="m-0 text-lg font-semibold">
+            {view === 'advantage' ? 'Who is ahead, by the year you sell' : 'Net worth if you sold that year'}
+          </h2>
+          <span className="text-xs text-muted">Click a year to see the results for selling then.</span>
+        </div>
         <div role="tablist" aria-label="Chart view" className="flex rounded-lg border border-line bg-ground p-[3px]">
           {tabs.map((tab) => (
             <button
@@ -95,15 +119,16 @@ export default function OutcomeChart({ baseline, scenarioResults, crossoverYear 
       <div className="h-[340px] sm:h-[380px]">
         <ResponsiveContainer width="100%" height="100%">
           {view === 'advantage' ? (
-            <LineChart data={data} margin={{ top: 8, right: 96, bottom: 4, left: 4 }}>
+            <LineChart data={data} margin={margin} onClick={handleClick} className="cursor-crosshair">
               <ReferenceArea y1={0} y2={yMax} fill={SERIES.rent} fillOpacity={0.08} ifOverflow="extendDomain"
                 label={{ value: 'Renting ahead', position: 'insideTopLeft', fill: INK.primary, fontSize: 12, fontWeight: 600 }} />
               <ReferenceArea y1={yMin} y2={0} fill={SERIES.buy} fillOpacity={0.07} ifOverflow="extendDomain"
                 label={{ value: 'Buying ahead', position: 'insideBottomLeft', fill: INK.primary, fontSize: 12, fontWeight: 600 }} />
               <CartesianGrid {...gridProps} />
-              <XAxis dataKey="year" {...axisProps} ticks={xTicks} interval={0} tickFormatter={(y: number) => (y === 0 ? 'Year 0' : String(y))} />
+              <XAxis dataKey="year" {...axisProps} ticks={xTicks} interval={0} tickFormatter={(y: number) => (y === 0 && wide ? 'Year 0' : String(y))} />
               <YAxis {...axisProps} width={64} domain={[yMin, yMax]} ticks={ticks} tickFormatter={(v: number) => formatCompactCurrency(v)} />
               <ReferenceLine y={0} stroke={INK.muted} />
+              {sellMarker}
               <Tooltip
                 {...tooltipProps}
                 labelFormatter={(y) => `Sell in year ${y}`}
@@ -112,23 +137,24 @@ export default function OutcomeChart({ baseline, scenarioResults, crossoverYear 
               {scenarioResults && (
                 <Line dataKey="pes" name="Pessimistic" stroke={INK.secondary} strokeWidth={1.5} strokeDasharray="6 4"
                   dot={false} isAnimationActive={false}
-                  label={endLabel(formatAdvantage(data[lastIndex].pes!), INK.secondary, lastIndex)} />
+                  label={endLabel(formatAdvantage(data[lastIndex].pes!), INK.secondary, lastIndex, wide)} />
               )}
               {scenarioResults && (
                 <Line dataKey="opt" name="Optimistic" stroke={INK.secondary} strokeWidth={1.5} strokeDasharray="1 4"
                   strokeLinecap="round" dot={false} isAnimationActive={false}
-                  label={endLabel(formatAdvantage(data[lastIndex].opt!), INK.secondary, lastIndex)} />
+                  label={endLabel(formatAdvantage(data[lastIndex].opt!), INK.secondary, lastIndex, wide)} />
               )}
               <Line dataKey="base" name="Baseline" stroke={INK.primary} strokeWidth={2.5} dot={false} isAnimationActive={false}
-                label={endLabel(formatAdvantage(data[lastIndex].base), INK.primary, lastIndex)} />
+                label={endLabel(formatAdvantage(data[lastIndex].base), INK.primary, lastIndex, wide)} />
               {crossoverYear !== null && (
                 <ReferenceDot x={crossoverYear} y={0} r={5} fill={INK.ground} stroke={INK.primary} strokeWidth={2} />
               )}
             </LineChart>
           ) : (
-            <LineChart data={data} margin={{ top: 8, right: 96, bottom: 4, left: 4 }}>
+            <LineChart data={data} margin={margin} onClick={handleClick} className="cursor-crosshair">
               <CartesianGrid {...gridProps} />
-              <XAxis dataKey="year" {...axisProps} ticks={xTicks} interval={0} tickFormatter={(y: number) => (y === 0 ? 'Year 0' : String(y))} />
+              {sellMarker}
+              <XAxis dataKey="year" {...axisProps} ticks={xTicks} interval={0} tickFormatter={(y: number) => (y === 0 && wide ? 'Year 0' : String(y))} />
               <YAxis {...axisProps} width={64} tickFormatter={(v: number) => formatCompactCurrency(v)} />
               <Tooltip
                 {...tooltipProps}
@@ -136,9 +162,9 @@ export default function OutcomeChart({ baseline, scenarioResults, crossoverYear 
                 formatter={(value: number, name: string) => [formatCurrency(value), name]}
               />
               <Line dataKey="buy" name="Buy" stroke={SERIES.buy} strokeWidth={2.5} dot={false} isAnimationActive={false}
-                label={endLabel(`Buy ${formatCompactCurrency(data[lastIndex].buy)}`, INK.primary, lastIndex)} />
+                label={endLabel(`Buy ${formatCompactCurrency(data[lastIndex].buy)}`, INK.primary, lastIndex, wide)} />
               <Line dataKey="rent" name="Rent + invest" stroke={SERIES.rent} strokeWidth={2.5} dot={false} isAnimationActive={false}
-                label={endLabel(`Rent ${formatCompactCurrency(data[lastIndex].rent)}`, INK.primary, lastIndex)} />
+                label={endLabel(`Rent ${formatCompactCurrency(data[lastIndex].rent)}`, INK.primary, lastIndex, wide)} />
             </LineChart>
           )}
         </ResponsiveContainer>

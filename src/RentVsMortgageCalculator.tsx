@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { InvestmentInputs, MonteCarloResults, PropertyInputs, RentInputs } from './types';
 import {
   calculateMortgagePayment,
@@ -26,8 +26,26 @@ import FocusAnalysis from './components/FocusAnalysis';
 import RiskView from './components/RiskView';
 import PortfolioComparison from './components/PortfolioComparison';
 import { PORTFOLIOS, applyPortfolio } from './portfolios';
+import { decodeState, encodeState, type SharedState } from './utils/shareState';
 
 type View = 'dashboard' | 'risk';
+
+const DEFAULT_STATE: SharedState = {
+  property: DEFAULT_PROPERTY,
+  rent: DEFAULT_RENT,
+  investment: DEFAULT_INVESTMENT,
+  horizon: DEFAULT_HORIZON,
+  sellYear: null,
+  scenarioMode: true,
+  realTerms: false,
+};
+
+/** Accumulated effect of the user's recent edits on the rent-minus-buy advantage. */
+interface ChangeFlash {
+  start: number;
+  delta: number;
+  at: number;
+}
 
 function Segmented<T extends string | boolean>({
   label,
@@ -48,7 +66,7 @@ function Segmented<T extends string | boolean>({
           type="button"
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
-          className={`min-h-9 rounded-md px-3 text-[13px] sm:px-3.5 ${
+          className={`min-h-9 rounded-md px-2.5 text-[13px] sm:px-3.5 ${
             value === option.value ? 'bg-line font-semibold text-ink' : 'text-ink-2 hover:text-ink'
           }`}
         >
@@ -60,18 +78,38 @@ function Segmented<T extends string | boolean>({
 }
 
 export default function RentVsMortgageCalculator() {
-  const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>(DEFAULT_PROPERTY);
-  const [rentInputs, setRentInputs] = useState<RentInputs>(DEFAULT_RENT);
-  const [investmentInputs, setInvestmentInputs] = useState<InvestmentInputs>(DEFAULT_INVESTMENT);
-  const [timeHorizon, setTimeHorizon] = useState(DEFAULT_HORIZON);
-  const [scenarioMode, setScenarioMode] = useState(true);
-  const [realTerms, setRealTerms] = useState(false);
+  // A shared link (#s=…) restores someone else's scenario; otherwise start from defaults
+  const [initial] = useState(() => decodeState(window.location.hash, DEFAULT_STATE) ?? DEFAULT_STATE);
+  const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>(initial.property);
+  const [rentInputs, setRentInputs] = useState<RentInputs>(initial.rent);
+  const [investmentInputs, setInvestmentInputs] = useState<InvestmentInputs>(initial.investment);
+  const [timeHorizon, setTimeHorizon] = useState(initial.horizon);
+  const [sellYearSetting, setSellYearSetting] = useState<number | null>(initial.sellYear);
+  const [scenarioMode, setScenarioMode] = useState(initial.scenarioMode);
+  const [realTerms, setRealTerms] = useState(initial.realTerms);
+  const [changeFlash, setChangeFlash] = useState<ChangeFlash | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [focusMetric, setFocusMetric] = useState<string | null>(null);
   const [view, setView] = useState<View>('dashboard');
   const [monteCarloRun, setMonteCarloRun] = useState<{ results: MonteCarloResults; inputsKey: string } | null>(null);
   const [monteCarloRunning, setMonteCarloRunning] = useState(false);
 
   const inflationRate = investmentInputs.inflationRate;
+  // null means "at the end of the horizon", so it follows horizon changes
+  const sellYear = Math.min(sellYearSetting ?? timeHorizon, timeHorizon);
+
+  useEffect(() => {
+    const hash = encodeState({
+      property: propertyInputs,
+      rent: rentInputs,
+      investment: investmentInputs,
+      horizon: timeHorizon,
+      sellYear: sellYearSetting,
+      scenarioMode,
+      realTerms,
+    });
+    window.history.replaceState(null, '', `#${hash}`);
+  }, [propertyInputs, rentInputs, investmentInputs, timeHorizon, sellYearSetting, scenarioMode, realTerms]);
   const inputsKey = JSON.stringify([propertyInputs, rentInputs, investmentInputs, timeHorizon]);
   const monteCarloStale = monteCarloRun !== null && monteCarloRun.inputsKey !== inputsKey;
 
@@ -84,8 +122,8 @@ export default function RentVsMortgageCalculator() {
     [scenarioMode, propertyInputs, rentInputs, investmentInputs, timeHorizon]
   );
   const breakEvenResults = useMemo(
-    () => calculateBreakEven(propertyInputs, rentInputs, investmentInputs, timeHorizon),
-    [propertyInputs, rentInputs, investmentInputs, timeHorizon]
+    () => calculateBreakEven(propertyInputs, rentInputs, investmentInputs, sellYear),
+    [propertyInputs, rentInputs, investmentInputs, sellYear]
   );
 
   const baseline = realTerms ? toRealTerms(nominalBaseline, inflationRate) : nominalBaseline;
@@ -96,7 +134,7 @@ export default function RentVsMortgageCalculator() {
         optimistic: toRealTerms(nominalScenarios.optimistic, inflationRate),
       }
     : nominalScenarios;
-  const final = baseline[baseline.length - 1];
+  const final = baseline[sellYear];
   const crossoverYear = findBuyCrossoverYear(nominalBaseline);
   const monteCarloResults = monteCarloRun
     ? realTerms
@@ -129,12 +167,45 @@ export default function RentVsMortgageCalculator() {
     if (!monteCarloRun || monteCarloStale) runMonteCarlo();
   };
 
+  /** Rent-minus-buy advantage at the chosen sell year, in the displayed dollar basis. */
+  const advantageFor = (p: PropertyInputs, r: RentInputs, i: InvestmentInputs, h: number) => {
+    const year = Math.min(sellYearSetting ?? h, h);
+    const s = runComparison(p, r, i, h)[year];
+    const advantage = s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale;
+    return realTerms ? advantage / Math.pow(1 + i.inflationRate / 100, year) : advantage;
+  };
+
+  /** Apply an input edit and record how far it moved the result (edits within 2.5s add up). */
+  const updateInputs = (next: { p?: PropertyInputs; r?: RentInputs; i?: InvestmentInputs; h?: number }) => {
+    const p = next.p ?? propertyInputs;
+    const r = next.r ?? rentInputs;
+    const i = next.i ?? investmentInputs;
+    const h = next.h ?? timeHorizon;
+    const now = Date.now();
+    const start = changeFlash && now - changeFlash.at < 2500
+      ? changeFlash.start
+      : advantageFor(propertyInputs, rentInputs, investmentInputs, timeHorizon);
+    setChangeFlash({ start, delta: advantageFor(p, r, i, h) - start, at: now });
+    if (next.p) setPropertyInputs(next.p);
+    if (next.r) setRentInputs(next.r);
+    if (next.i) setInvestmentInputs(next.i);
+    if (next.h !== undefined) setTimeHorizon(next.h);
+  };
+
   const resetInputs = () => {
-    setPropertyInputs(DEFAULT_PROPERTY);
-    setRentInputs(DEFAULT_RENT);
-    setInvestmentInputs(DEFAULT_INVESTMENT);
-    setTimeHorizon(DEFAULT_HORIZON);
+    updateInputs({ p: DEFAULT_PROPERTY, r: DEFAULT_RENT, i: DEFAULT_INVESTMENT, h: DEFAULT_HORIZON });
+    setSellYearSetting(null);
     setFocusMetric(null);
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      window.prompt('Copy this link', window.location.href);
+    }
   };
 
   const openFocus = (metric: string | null) => {
@@ -156,7 +227,7 @@ export default function RentVsMortgageCalculator() {
     <div className="min-h-screen bg-ground pb-24 text-ink lg:pb-0">
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-4">
+          <div className="flex w-full items-center gap-4 sm:w-auto">
             {view === 'risk' && (
               <button
                 type="button"
@@ -174,8 +245,20 @@ export default function RentVsMortgageCalculator() {
                   : 'Australian net worth comparison'}
               </span>
             </div>
+            <button
+              type="button"
+              onClick={copyLink}
+              aria-label={linkCopied ? 'Link copied' : 'Copy link to this scenario'}
+              className="ml-auto flex h-10 w-10 items-center justify-center rounded-lg border border-line text-ink-2 hover:text-ink sm:hidden"
+            >
+              {linkCopied ? (
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden><path d="M6.5 9.5a3 3 0 004.2 0l2.3-2.3a3 3 0 00-4.2-4.2L7.6 4.2M9.5 6.5a3 3 0 00-4.2 0L3 8.8a3 3 0 004.2 4.2l1.2-1.2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+              )}
+            </button>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {view === 'dashboard' ? (
               <Segmented
                 label="Scenario mode"
@@ -199,6 +282,14 @@ export default function RentVsMortgageCalculator() {
               onChange={setRealTerms}
               options={[{ value: false, label: 'Future $' }, { value: true, label: "Today's $" }]}
             />
+            <button
+              type="button"
+              onClick={copyLink}
+              className="hidden min-h-[42px] rounded-lg border border-line px-3.5 text-[13px] text-ink-2 hover:border-line-strong hover:text-ink sm:inline-block"
+              aria-live="polite"
+            >
+              {linkCopied ? 'Link copied' : 'Copy link'}
+            </button>
           </div>
         </div>
       </header>
@@ -222,10 +313,11 @@ export default function RentVsMortgageCalculator() {
               rentInputs={rentInputs}
               investmentInputs={investmentInputs}
               timeHorizon={timeHorizon}
-              onPropertyChange={setPropertyInputs}
-              onRentChange={setRentInputs}
-              onInvestmentChange={setInvestmentInputs}
-              onTimeHorizonChange={setTimeHorizon}
+              onPropertyChange={(p) => updateInputs({ p })}
+              onRentChange={(r) => updateInputs({ r })}
+              onPropertyAndRentChange={(p, r) => updateInputs({ p, r })}
+              onInvestmentChange={(i) => updateInputs({ i })}
+              onTimeHorizonChange={(h) => updateInputs({ h })}
               onReset={resetInputs}
               scenarioMode={scenarioMode}
               focusMetric={focusMetric}
@@ -237,13 +329,17 @@ export default function RentVsMortgageCalculator() {
           <main className="order-1 flex min-w-0 flex-col gap-6 lg:order-2">
             <Verdict
               final={final}
+              sellYear={sellYear}
               timeHorizon={timeHorizon}
+              onSellYearChange={(year) => setSellYearSetting(year >= timeHorizon ? null : year)}
+              changeFlash={changeFlash}
               crossoverYear={crossoverYear}
               breakEvens={breakEvenResults.results}
               realTerms={realTerms}
             />
             <KeyFigures
               baseline={baseline}
+              sellYear={sellYear}
               scenarioResults={scenarios}
               crossoverYear={crossoverYear}
               timeHorizon={timeHorizon}
@@ -263,19 +359,26 @@ export default function RentVsMortgageCalculator() {
                 />
               </div>
             )}
-            <OutcomeChart baseline={baseline} scenarioResults={scenarios} crossoverYear={crossoverYear} />
+            <OutcomeChart
+              baseline={baseline}
+              scenarioResults={scenarios}
+              crossoverYear={crossoverYear}
+              sellYear={sellYear}
+              onSellYearChange={(year) => setSellYearSetting(year >= timeHorizon ? null : year)}
+            />
             <PortfolioComparison
               propertyInputs={propertyInputs}
               rentInputs={rentInputs}
               investmentInputs={investmentInputs}
               timeHorizon={timeHorizon}
+              sellYear={sellYear}
               onSelect={(id) => {
                 const preset = PORTFOLIOS.find((x) => x.id === id);
-                if (preset) setInvestmentInputs(applyPortfolio(investmentInputs, preset));
+                if (preset) updateInputs({ i: applyPortfolio(investmentInputs, preset) });
               }}
             />
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <MoneyBreakdown final={final} timeHorizon={timeHorizon} />
+              <MoneyBreakdown final={final} timeHorizon={sellYear} />
               <FlipList breakEvens={breakEvenResults.results} buyWins={buyWins} onExplore={openFocus} />
             </div>
             <p className="m-0 max-w-3xl text-xs leading-relaxed text-muted">

@@ -5,6 +5,7 @@ import { formatCurrency } from '../utils/format';
 import { isScenarioValue } from '../utils/calculations';
 import InputField, { AdornedInput } from './InputField';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
+import { CITIES, applyCity } from '../cities';
 import MultiInput from './MultiInput';
 
 interface AssumptionsPanelProps {
@@ -14,6 +15,7 @@ interface AssumptionsPanelProps {
   timeHorizon: number;
   onPropertyChange: (inputs: PropertyInputs) => void;
   onRentChange: (inputs: RentInputs) => void;
+  onPropertyAndRentChange: (property: PropertyInputs, rent: RentInputs) => void;
   onInvestmentChange: (inputs: InvestmentInputs) => void;
   onTimeHorizonChange: (years: number) => void;
   onReset: () => void;
@@ -50,6 +52,7 @@ export default function AssumptionsPanel({
   timeHorizon,
   onPropertyChange,
   onRentChange,
+  onPropertyAndRentChange,
   onInvestmentChange,
   onTimeHorizonChange,
   onReset,
@@ -96,10 +99,14 @@ export default function AssumptionsPanel({
       />
     );
 
+  /** Hand-editing a city-derived value means the inputs no longer match the preset. */
+  const onCityProperty = (patch: Partial<PropertyInputs>) => onPropertyChange({ ...p, ...patch, location: undefined });
+
   /** Hand-editing a portfolio parameter means it no longer matches a preset. */
   const onPortfolioParam = (patch: Partial<InvestmentInputs>) =>
     onInvestmentChange({ ...inv, ...patch, portfolio: undefined });
 
+  const city = CITIES.find((c) => c.id === p.location);
   const lvr = p.propertyPrice > 0 ? ((p.propertyPrice - p.deposit) / p.propertyPrice) * 100 : 0;
 
   return (
@@ -116,8 +123,27 @@ export default function AssumptionsPanel({
       </div>
 
       <Section title="The home">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[13px] text-ink-2">Location</span>
+          <select
+            className="input-field"
+            value={p.location ?? 'custom'}
+            onChange={(e) => {
+              const city = CITIES.find((c) => c.id === e.target.value);
+              if (city) onPropertyAndRentChange(...applyCity(p, r, city));
+            }}
+          >
+            {CITIES.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}{c.state !== 'avg' ? ` (${c.state})` : ''}</option>
+            ))}
+            <option value="custom" disabled={p.location !== undefined}>Custom</option>
+          </select>
+          <span className="text-xs leading-snug text-muted">
+            Fills median price (Sep 2026), 20% deposit, stamp duty, rent, rates and insurance.
+          </span>
+        </label>
         <InputField label="Purchase price" format="currency" value={p.propertyPrice}
-          onChange={(propertyPrice) => onPropertyChange({ ...p, propertyPrice })} />
+          onChange={(propertyPrice) => onCityProperty({ propertyPrice })} />
         <InputField label="Deposit" format="currency" value={p.deposit}
           onChange={(deposit) => onPropertyChange({ ...p, deposit })} />
         <div className="flex flex-col gap-1.5" aria-label={`Loan to value ratio ${lvr.toFixed(1)}%`}>
@@ -137,8 +163,10 @@ export default function AssumptionsPanel({
         )}
         <Pair>
           <InputField label="Stamp duty" format="currency" value={p.stampDuty}
-            onChange={(stampDuty) => onPropertyChange({ ...p, stampDuty })}
-            helpText="Varies by state. At $975k: NSW ~$38k, VIC ~$54k, QLD ~$30k." />
+            onChange={(stampDuty) => onCityProperty({ stampDuty })}
+            helpText={city
+              ? `${city.state === 'avg' ? 'Average across states' : `${city.state} owner-occupier rate`} at the median. First home buyers may pay less.`
+              : 'Varies by state; first home buyers may pay less.'} />
           <InputField label="Other costs" format="currency" value={p.otherPurchaseCosts}
             onChange={(otherPurchaseCosts) => onPropertyChange({ ...p, otherPurchaseCosts })} />
         </Pair>
@@ -161,7 +189,8 @@ export default function AssumptionsPanel({
       <Section title="Renting instead">
         <Pair>
           <InputField label="Rent / month" format="currency" value={r.monthlyRent}
-            onChange={(monthlyRent) => onRentChange({ ...r, monthlyRent })} {...explore('monthlyRent')} />
+            onChange={(monthlyRent) => onPropertyAndRentChange({ ...p, location: undefined }, { ...r, monthlyRent })}
+            {...explore('monthlyRent')} />
           <InputField label="Move every" format="years" value={r.movingFrequency}
             onChange={(movingFrequency) => onRentChange({ ...r, movingFrequency })} />
         </Pair>
@@ -218,9 +247,9 @@ export default function AssumptionsPanel({
             helpText="Share of the property's value." {...explore('maintenanceRate')} />
           <Pair>
             <InputField label="Council & water / year" format="currency" value={p.councilRates}
-              onChange={(councilRates) => onPropertyChange({ ...p, councilRates })} />
+              onChange={(councilRates) => onCityProperty({ councilRates })} />
             <InputField label="Building insurance" format="currency" value={p.buildingInsurance}
-              onChange={(buildingInsurance) => onPropertyChange({ ...p, buildingInsurance })} />
+              onChange={(buildingInsurance) => onCityProperty({ buildingInsurance })} />
           </Pair>
           <Pair>
             <InputField label="Owner contents ins." format="currency" value={p.contentsInsurance}

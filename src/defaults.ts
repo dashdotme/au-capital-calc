@@ -22,6 +22,7 @@ export const DEFAULT_PROPERTY: PropertyInputs = {
   capitalGainsTaxRate: 0,
   offsetAccountBalance: 50000,
   lmi: 0,
+  location: 'capitals',
 };
 
 export const DEFAULT_RENT: RentInputs = {
