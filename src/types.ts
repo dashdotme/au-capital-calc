@@ -41,6 +41,12 @@ export interface InvestmentInputs {
   dividendYield?: number;
   frankingLevel?: number;
   dividendReinvestment?: boolean;
+  /** Annual fund management fee (MER), % of balance; deducted from the total return */
+  managementFee?: number;
+  /** Year-to-year volatility of the portfolio's returns (%), used by Monte Carlo */
+  stockVolatility?: number;
+  /** Id of the portfolio preset these values came from, if any */
+  portfolio?: string;
 }
 
 /**
@@ -90,6 +96,7 @@ export interface ScenarioResults {
 }
 
 export interface BreakEvenResult {
+  metricKey: string;
   metric: string;
   currentValue: number;
   breakEvenValue: number | null;

@@ -85,13 +85,13 @@ export function calculateFocusRange(metricKey: string, baselineValue: number): F
 
 export function getMetricLabel(metricKey: string): string {
   const labels: Record<string, string> = {
-    interestRate: 'Interest Rate',
-    rentIncreaseRate: 'Rent Increase Rate',
-    stockMarketReturn: 'Stock Market Return',
-    propertyGrowthRate: 'Property Growth Rate',
-    maintenanceRate: 'Maintenance Rate',
-    dividendYield: 'Dividend Yield',
-    monthlyRent: 'Monthly Rent',
+    interestRate: 'Mortgage rate',
+    rentIncreaseRate: 'Rent growth',
+    stockMarketReturn: 'Share returns',
+    propertyGrowthRate: 'Property growth',
+    maintenanceRate: 'Maintenance',
+    dividendYield: 'Dividend yield',
+    monthlyRent: 'Starting rent',
   };
   return labels[metricKey] || metricKey;
 }
@@ -113,5 +113,5 @@ export function formatCompactValue(value: number, unit: string): string {
     }
     return `$${Math.round(value)}`;
   }
-  return `${value}${unit}`;
+  return `${Number(value.toFixed(2))}${unit}`;
 }

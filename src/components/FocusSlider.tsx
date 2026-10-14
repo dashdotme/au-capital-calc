@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import { formatCompactValue } from '../utils/focusRanges';
+import { FOCUS_RAMP } from './chartTheme';
 
 interface FocusSliderProps {
   values: number[];
@@ -7,103 +8,73 @@ interface FocusSliderProps {
   unit: string;
   min?: number;
   max?: number;
+  label: string;
 }
 
-export default function FocusSlider({
-  values,
-  onChange,
-  unit,
-  min = 0,
-  max = 15,
-}: FocusSliderProps) {
-  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-  const sliderRef = useRef<HTMLDivElement>(null);
+/** Five ordered handles on one track; pointer events so it works with touch too. */
+export default function FocusSlider({ values, onChange, unit, min = 0, max = 15, label }: FocusSliderProps) {
+  const [dragging, setDragging] = useState<number | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const step = unit === '$' ? 50 : 0.05;
 
-  const handleMouseDown = (index: number) => {
-    setDraggingIndex(index);
+  const position = (value: number) => ((value - min) / (max - min)) * 100;
+
+  const setValue = (index: number, raw: number) => {
+    const next = [...values];
+    const lower = index > 0 ? values[index - 1] : min;
+    const upper = index < values.length - 1 ? values[index + 1] : max;
+    next[index] = Math.round(Math.min(upper, Math.max(lower, raw)) / step) * step;
+    onChange(next);
   };
 
-  useEffect(() => {
-    if (draggingIndex === null) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!sliderRef.current || draggingIndex === null) return;
-
-      const rect = sliderRef.current.getBoundingClientRect();
-      const percentage = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const newValue = min + percentage * (max - min);
-
-      const newValues = [...values];
-      newValues[draggingIndex] = Math.round(newValue * 100) / 100;
-
-      // Ensure handles don't cross each other
-      if (draggingIndex > 0 && newValues[draggingIndex] < newValues[draggingIndex - 1]) {
-        newValues[draggingIndex] = newValues[draggingIndex - 1];
-      }
-      if (draggingIndex < 4 && newValues[draggingIndex] > newValues[draggingIndex + 1]) {
-        newValues[draggingIndex] = newValues[draggingIndex + 1];
-      }
-
-      onChange(newValues);
-    };
-
-    const handleMouseUp = () => {
-      setDraggingIndex(null);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [draggingIndex, values, min, max, onChange]);
-
-  const getPosition = (value: number) => {
-    return ((value - min) / (max - min)) * 100;
+  const handleMove = (e: React.PointerEvent) => {
+    if (dragging === null || !trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    setValue(dragging, min + fraction * (max - min));
   };
-
-  const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6'];
 
   return (
-    <div className="mb-6">
+    <div className="px-3 pt-2 pb-1">
       <div
-        ref={sliderRef}
-        className="relative h-2 bg-gray-700 rounded-full cursor-pointer"
+        ref={trackRef}
+        className="relative h-1.5 rounded-full bg-line"
+        onPointerMove={handleMove}
+        onPointerUp={() => setDragging(null)}
+        onPointerCancel={() => setDragging(null)}
       >
-        {/* Track */}
-        <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 opacity-30 rounded-full" />
-
-        {/* Handles */}
         {values.map((value, index) => (
           <div
             key={index}
-            onMouseDown={() => handleMouseDown(index)}
-            style={{
-              left: `${getPosition(value)}%`,
-              backgroundColor: colors[index],
+            role="slider"
+            tabIndex={0}
+            aria-label={`${label}, value ${index + 1} of ${values.length}`}
+            aria-valuemin={min}
+            aria-valuemax={max}
+            aria-valuenow={value}
+            aria-valuetext={formatCompactValue(value, unit)}
+            onPointerDown={(e) => {
+              e.currentTarget.parentElement?.setPointerCapture(e.pointerId);
+              setDragging(index);
             }}
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 rounded-full cursor-grab active:cursor-grabbing shadow-lg border-2 border-white transition-transform hover:scale-110"
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') setValue(index, value - step);
+              if (e.key === 'ArrowRight' || e.key === 'ArrowUp') setValue(index, value + step);
+            }}
+            style={{ left: `${position(value)}%`, backgroundColor: FOCUS_RAMP[index] }}
+            className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-full border-2 border-ground shadow active:cursor-grabbing"
           />
         ))}
       </div>
-
-      {/* Labels */}
-      <div className="relative h-16 mt-2">
+      <div className="relative mt-2 h-9 font-mono text-xs text-ink-2">
         {values.map((value, index) => (
-          <div
+          <span
             key={index}
-            style={{
-              left: `${getPosition(value)}%`,
-              color: colors[index],
-              transform: 'translateX(-50%) rotate(-30deg)',
-              transformOrigin: 'center top',
-            }}
-            className="absolute text-xs font-semibold whitespace-nowrap"
+            className="absolute -translate-x-1/2 whitespace-nowrap"
+            style={{ left: `${position(value)}%`, top: index % 2 ? 18 : 0 }}
           >
             {formatCompactValue(value, unit)}
-          </div>
+          </span>
         ))}
       </div>
     </div>

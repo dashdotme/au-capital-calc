@@ -1,11 +1,81 @@
 import { useState, type ReactNode } from 'react';
+import { formatInputValue, parseInputValue, type InputFormat } from '../utils/format';
+
+const SUFFIX: Record<InputFormat, string> = { currency: '', percent: '%', years: 'yrs', number: '' };
+
+export function FocusModeButton({ onClick, active, label }: { onClick: () => void; active?: boolean; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={`See how ${label.toLowerCase()} changes the result`}
+      className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+        active ? 'border-ink-2 bg-raised text-ink' : 'border-line text-ink-2 hover:border-line-strong hover:text-ink'
+      }`}
+    >
+      {active ? 'Exploring' : 'Explore'}
+    </button>
+  );
+}
+
+/** Text input with $ / % / yrs adornments; shows thousands separators when not focused. */
+export function AdornedInput({
+  value,
+  onChange,
+  format = 'number',
+  ariaLabel,
+  emphasis,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  format?: InputFormat;
+  ariaLabel: string;
+  emphasis?: boolean;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const suffix = SUFFIX[format];
+
+  return (
+    <div className="relative min-w-0">
+      {format === 'currency' && (
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-ink-2">$</span>
+      )}
+      <input
+        type="text"
+        inputMode="decimal"
+        aria-label={ariaLabel}
+        value={draft ?? formatInputValue(value, format)}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          const parsed = parseInputValue(e.target.value);
+          if (parsed !== null) onChange(parsed);
+        }}
+        onFocus={(e) => {
+          setDraft(value.toString());
+          const input = e.target;
+          requestAnimationFrame(() => input.select());
+        }}
+        onBlur={() => setDraft(null)}
+        className={`input-field tabular-nums ${format === 'currency' ? 'pl-6' : ''} ${suffix ? 'pr-9' : ''} ${
+          emphasis ? 'border-ink-2!' : ''
+        }`}
+      />
+      {suffix && (
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted">{suffix}</span>
+      )}
+    </div>
+  );
+}
 
 interface InputFieldProps {
   label: string;
   value: number;
   onChange: (value: number) => void;
   helpText?: ReactNode;
+  format?: InputFormat;
   onFocusMode?: () => void;
+  focusActive?: boolean;
 }
 
 export default function InputField({
@@ -13,70 +83,18 @@ export default function InputField({
   value,
   onChange,
   helpText,
+  format = 'number',
   onFocusMode,
+  focusActive,
 }: InputFieldProps) {
-  const [displayValue, setDisplayValue] = useState(value.toString());
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setDisplayValue(newValue);
-
-    const numValue = parseFloat(newValue);
-    if (!isNaN(numValue)) {
-      onChange(numValue);
-    } else if (newValue === '' || newValue === '-') {
-      onChange(0);
-    }
-  };
-
-  const handleBlur = () => {
-    setDisplayValue(value.toString());
-  };
-
   return (
-    <label className="block mb-4">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-sm text-[var(--color-text-secondary)]">{label}</span>
-        {onFocusMode && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              onFocusMode();
-            }}
-            className="text-text-secondary hover:text-accent transition-colors"
-            title="Focus Mode"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" />
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z"
-                clipRule="evenodd"
-              />
-            </svg>
-          </button>
-        )}
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-h-7 items-center justify-between gap-2">
+        <span className="text-[13px] text-ink-2">{label}</span>
+        {onFocusMode && <FocusModeButton onClick={onFocusMode} active={focusActive} label={label} />}
       </div>
-      <input
-        type="text"
-        inputMode="decimal"
-        value={displayValue}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        onFocus={(e) => e.target.select()}
-        className="input-field"
-      />
-      {helpText && (
-        <span className="text-xs mt-1 block text-[var(--color-text-secondary)] opacity-70">
-          {helpText}
-        </span>
-      )}
-    </label>
+      <AdornedInput value={value} onChange={onChange} format={format} ariaLabel={label} />
+      {helpText && <span className="text-xs leading-snug text-muted">{helpText}</span>}
+    </div>
   );
 }

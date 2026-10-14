@@ -99,19 +99,19 @@ function getSearchRange(metricKey: string, currentValue: number): [number, numbe
 function getMetricLabel(metricKey: string): string {
   switch (metricKey) {
     case 'interestRate':
-      return 'Interest Rate';
+      return 'Mortgage rate';
     case 'maintenanceRate':
-      return 'Maintenance Rate';
+      return 'Maintenance';
     case 'monthlyRent':
-      return 'Monthly Rent';
+      return 'Starting rent';
     case 'rentIncreaseRate':
-      return 'Rent Increase Rate';
+      return 'Rent growth';
     case 'stockMarketReturn':
-      return 'Stock Market Return';
+      return 'Share returns';
     case 'propertyGrowthRate':
-      return 'Property Growth Rate';
+      return 'Property growth';
     case 'dividendYield':
-      return 'Dividend Yield';
+      return 'Dividend yield';
     default:
       return metricKey;
   }
@@ -197,6 +197,7 @@ export function calculateBreakEven(
     const interpretation = getInterpretation(key, current, breakEvenValue, currentFavorsBuy);
 
     return {
+      metricKey: key,
       metric: getMetricLabel(key),
       currentValue: current,
       breakEvenValue,

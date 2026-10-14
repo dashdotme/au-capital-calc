@@ -27,9 +27,13 @@ export function generateRatePaths(
   baselines: Record<(typeof SIMULATED_VARIABLES)[number], number>,
   years: number,
   rng: () => number,
-  choleskyFactor: number[][] = cholesky(DEFAULT_CORRELATION_MATRIX)
+  choleskyFactor: number[][] = cholesky(DEFAULT_CORRELATION_MATRIX),
+  stockVolatility: number = DEFAULT_VARIABLE_MODELS.stockMarketReturn.annualStdDev
 ): Required<RatePaths> {
-  const m = DEFAULT_VARIABLE_MODELS;
+  const m = {
+    ...DEFAULT_VARIABLE_MODELS,
+    stockMarketReturn: { ...DEFAULT_VARIABLE_MODELS.stockMarketReturn, annualStdDev: stockVolatility },
+  };
   const [zi, zr, zs, zp] = correlatedNormals(choleskyFactor, rng);
   const longRun = {
     interestRate: clamp(baselines.interestRate + zi * m.interestRate.longRunStdDev, m.interestRate.min, m.interestRate.max),
@@ -93,7 +97,7 @@ export function runMonteCarloSimulation(
   };
 
   for (let i = 0; i < iterations; i++) {
-    const paths = generateRatePaths(baselines, years, rng, choleskyFactor);
+    const paths = generateRatePaths(baselines, years, rng, choleskyFactor, investmentInputs.stockVolatility);
     const results = runComparison(propertyInputs, rentInputs, investmentInputs, years, paths);
 
     for (const snapshot of results) {

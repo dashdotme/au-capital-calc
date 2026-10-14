@@ -121,6 +121,7 @@ export function runComparison(
   const dividendYield = (investmentInputs.dividendYield ?? 0) / 100;
   const frankingLevel = (investmentInputs.frankingLevel ?? 0) / 100;
   const reinvestDividends = investmentInputs.dividendReinvestment ?? true;
+  const managementFee = (investmentInputs.managementFee ?? 0) / 100;
   const offset = Math.max(0, propertyInputs.offsetAccountBalance ?? 0);
   const totalMonths = Math.max(0, Math.round(propertyInputs.loanTerm * 12));
 
@@ -192,7 +193,7 @@ export function runComparison(
 
   for (let year = 1; year <= years; year++) {
     const interestRate = rateFor(paths.interestRate, year, baseInterestRate);
-    const stockReturn = rateFor(paths.stockMarketReturn, year, baseStockReturn) / 100;
+    const stockReturn = rateFor(paths.stockMarketReturn, year, baseStockReturn) / 100 - managementFee;
     const propertyGrowth = rateFor(paths.propertyGrowthRate, year, basePropertyGrowth) / 100;
     const rentIncrease = rateFor(paths.rentIncreaseRate, year, baseRentIncrease) / 100;
 

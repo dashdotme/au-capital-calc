@@ -155,6 +155,14 @@ describe('runComparison', () => {
     expect(withOffset[1].mortgageTotalInterest).toBeLessThan(without[1].mortgageTotalInterest);
   });
 
+  it('deducts the management fee from returns', () => {
+    const noFee = last(runComparison(property, rent, investment, 30));
+    const withFee = last(runComparison(property, rent, { ...investment, managementFee: 0.5 }, 30));
+    const lowerReturn = last(runComparison(property, rent, { ...investment, stockMarketReturn: 7.5 }, 30));
+    expect(withFee.rentInvestmentValue).toBeLessThan(noFee.rentInvestmentValue);
+    expect(withFee.rentInvestmentValue / lowerReturn.rentInvestmentValue).toBeCloseTo(1, 2);
+  });
+
   it('re-amortises when the interest rate path changes', () => {
     const results = runComparison(property, rent, investment, 3, { interestRate: [5.5, 8, 8] });
     expect(results[2].mortgageAnnualCost).toBeGreaterThan(results[1].mortgageAnnualCost);
@@ -181,7 +189,7 @@ describe('helpers', () => {
 
   it('finds break-even values that actually break even', () => {
     const { results } = calculateBreakEven(property, rent, investment, 30);
-    const rentResult = results.find((r) => r.metric === 'Monthly Rent')!;
+    const rentResult = results.find((r) => r.metricKey === 'monthlyRent')!;
     expect(rentResult.exists).toBe(true);
     const r = last(runComparison(property, { ...rent, monthlyRent: rentResult.breakEvenValue! }, investment, 30));
     expect(Math.abs(r.rentNetPositionAfterTax - r.mortgageNetPositionAfterSale)).toBeLessThan(5000);

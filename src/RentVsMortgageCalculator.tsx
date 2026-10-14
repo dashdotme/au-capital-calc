@@ -1,139 +1,112 @@
-import { useState, useMemo } from 'react';
-import type { PropertyInputs, RentInputs, InvestmentInputs, MonteCarloResults } from './types';
+import { useMemo, useState } from 'react';
+import type { InvestmentInputs, MonteCarloResults, PropertyInputs, RentInputs } from './types';
 import {
   calculateMortgagePayment,
   findBuyCrossoverYear,
+  resolveScenarioValue,
   runComparison,
   runScenarioComparison,
-  isScenarioValue,
   toRealTerms,
 } from './utils/calculations';
 import { calculateBreakEven } from './utils/breakeven';
 import { monteCarloToRealTerms, runMonteCarloSimulation } from './utils/monteCarlo';
-import PropertyInputsCard from './components/PropertyInputsCard';
-import RentInputsCard from './components/RentInputsCard';
-import InvestmentInputsCard from './components/InvestmentInputsCard';
-import ResultsSummary from './components/ResultsSummary';
-import ComparisonChart from './components/ComparisonChart';
-import ScenarioToggle from './components/ScenarioToggle';
-import MonteCarloView from './components/MonteCarloView';
+import {
+  DEFAULT_HORIZON,
+  DEFAULT_INVESTMENT,
+  DEFAULT_PROPERTY,
+  DEFAULT_RENT,
+  MONTE_CARLO_ITERATIONS,
+} from './defaults';
+import AssumptionsPanel from './components/AssumptionsPanel';
+import Verdict from './components/Verdict';
+import KeyFigures from './components/KeyFigures';
+import OutcomeChart from './components/OutcomeChart';
+import { FlipList, MoneyBreakdown } from './components/ResultsDetail';
+import FocusAnalysis from './components/FocusAnalysis';
+import RiskView from './components/RiskView';
+import PortfolioComparison from './components/PortfolioComparison';
+import { PORTFOLIOS, applyPortfolio } from './portfolios';
+
+type View = 'dashboard' | 'risk';
+
+function Segmented<T extends string | boolean>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex rounded-lg border border-line bg-surface p-[3px]">
+      {options.map((option) => (
+        <button
+          key={String(option.value)}
+          type="button"
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={`min-h-9 rounded-md px-3 text-[13px] sm:px-3.5 ${
+            value === option.value ? 'bg-line font-semibold text-ink' : 'text-ink-2 hover:text-ink'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function RentVsMortgageCalculator() {
-  const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>({
-    propertyPrice: 900000,
-    deposit: 180000,
-    loanTerm: 30,
-    interestRate: {
-      pessimistic: 6.5,
-      baseline: 4.5,
-      optimistic: 3.5,
-    },
-    stampDuty: 30000,
-    otherPurchaseCosts: 10000,
-    maintenanceRate: 1.0,
-    councilRates: 2500,
-    buildingInsurance: 1400,
-    contentsInsurance: 1000,
-    sellingCostRate: 3.0,
-    capitalGainsTaxRate: 0,
-    offsetAccountBalance: 50000,
-    lmi: 0,
-  });
-
-  const [rentInputs, setRentInputs] = useState<RentInputs>({
-    monthlyRent: 3000,
-    rentIncreaseRate: {
-      pessimistic: 5,
-      baseline: 3,
-      optimistic: 2,
-    },
-    movingFrequency: 3,
-    movingCost: 2000,
-    contentsInsurance: 1200,
-  });
-
-  const [investmentInputs, setInvestmentInputs] = useState<InvestmentInputs>({
-    stockMarketReturn: {
-      pessimistic: 6,
-      baseline: 8,
-      optimistic: 10,
-    },
-    propertyGrowthRate: {
-      pessimistic: 3,
-      baseline: 4.5,
-      optimistic: 6,
-    },
-    marginalTaxRate: 39,
-    inflationRate: 2.5,
-    stockTransactionCost: 0.1,
-    dividendYield: 1.5,
-    frankingLevel: 0,
-    dividendReinvestment: true,
-  });
-
-  const [timeHorizon, setTimeHorizon] = useState(30);
+  const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>(DEFAULT_PROPERTY);
+  const [rentInputs, setRentInputs] = useState<RentInputs>(DEFAULT_RENT);
+  const [investmentInputs, setInvestmentInputs] = useState<InvestmentInputs>(DEFAULT_INVESTMENT);
+  const [timeHorizon, setTimeHorizon] = useState(DEFAULT_HORIZON);
   const [scenarioMode, setScenarioMode] = useState(true);
-  const [focusMetric, setFocusMetric] = useState<string | null>(null);
   const [realTerms, setRealTerms] = useState(false);
+  const [focusMetric, setFocusMetric] = useState<string | null>(null);
+  const [view, setView] = useState<View>('dashboard');
   const [monteCarloRun, setMonteCarloRun] = useState<{ results: MonteCarloResults; inputsKey: string } | null>(null);
   const [monteCarloRunning, setMonteCarloRunning] = useState(false);
 
+  const inflationRate = investmentInputs.inflationRate;
   const inputsKey = JSON.stringify([propertyInputs, rentInputs, investmentInputs, timeHorizon]);
   const monteCarloStale = monteCarloRun !== null && monteCarloRun.inputsKey !== inputsKey;
-  const inflationRate = investmentInputs.inflationRate;
+
+  const nominalBaseline = useMemo(
+    () => runComparison(propertyInputs, rentInputs, investmentInputs, timeHorizon),
+    [propertyInputs, rentInputs, investmentInputs, timeHorizon]
+  );
+  const nominalScenarios = useMemo(
+    () => (scenarioMode ? runScenarioComparison(propertyInputs, rentInputs, investmentInputs, timeHorizon) : null),
+    [scenarioMode, propertyInputs, rentInputs, investmentInputs, timeHorizon]
+  );
+  const breakEvenResults = useMemo(
+    () => calculateBreakEven(propertyInputs, rentInputs, investmentInputs, timeHorizon),
+    [propertyInputs, rentInputs, investmentInputs, timeHorizon]
+  );
+
+  const baseline = realTerms ? toRealTerms(nominalBaseline, inflationRate) : nominalBaseline;
+  const scenarios = nominalScenarios && realTerms
+    ? {
+        pessimistic: toRealTerms(nominalScenarios.pessimistic, inflationRate),
+        baseline: toRealTerms(nominalScenarios.baseline, inflationRate),
+        optimistic: toRealTerms(nominalScenarios.optimistic, inflationRate),
+      }
+    : nominalScenarios;
+  const final = baseline[baseline.length - 1];
+  const crossoverYear = findBuyCrossoverYear(nominalBaseline);
   const monteCarloResults = monteCarloRun
     ? realTerms
       ? monteCarloToRealTerms(monteCarloRun.results, inflationRate, timeHorizon)
       : monteCarloRun.results
     : null;
 
-  const hasScenarioValues = useMemo(() => {
-    return (
-      isScenarioValue(propertyInputs.interestRate) ||
-      isScenarioValue(rentInputs.rentIncreaseRate) ||
-      isScenarioValue(investmentInputs.stockMarketReturn) ||
-      isScenarioValue(investmentInputs.propertyGrowthRate)
-    );
-  }, [propertyInputs.interestRate, rentInputs.rentIncreaseRate, investmentInputs.stockMarketReturn, investmentInputs.propertyGrowthRate]);
-
-  const baselineResults = useMemo(
-    () => runComparison(propertyInputs, rentInputs, investmentInputs, timeHorizon),
-    [propertyInputs, rentInputs, investmentInputs, timeHorizon]
-  );
-
-  const results = useMemo(() => {
-    if (scenarioMode && hasScenarioValues) {
-      const nominal = runScenarioComparison(propertyInputs, rentInputs, investmentInputs, timeHorizon);
-      if (!realTerms) return nominal;
-      return {
-        pessimistic: toRealTerms(nominal.pessimistic, inflationRate),
-        baseline: toRealTerms(nominal.baseline, inflationRate),
-        optimistic: toRealTerms(nominal.optimistic, inflationRate),
-      };
-    }
-    return null;
-  }, [scenarioMode, hasScenarioValues, propertyInputs, rentInputs, investmentInputs, timeHorizon, realTerms, inflationRate]);
-
-  const singleResults = useMemo(() => {
-    if (!scenarioMode || !hasScenarioValues) {
-      return realTerms ? toRealTerms(baselineResults, inflationRate) : baselineResults;
-    }
-    return null;
-  }, [scenarioMode, hasScenarioValues, baselineResults, realTerms, inflationRate]);
-
-  const crossoverYear = findBuyCrossoverYear(baselineResults);
-  // First full year of ownership: positive means owning costs more than renting
-  const monthlyCostGap = baselineResults.length > 1
-    ? (baselineResults[1].mortgageAnnualCost - baselineResults[1].rentAnnualCost) / 12
-    : 0;
-
-  const breakEvenResults = useMemo(() => {
-    return calculateBreakEven(propertyInputs, rentInputs, investmentInputs, timeHorizon);
-  }, [propertyInputs, rentInputs, investmentInputs, timeHorizon]);
-
-  const handleRunMonteCarlo = async () => {
+  const runMonteCarlo = () => {
     setMonteCarloRunning(true);
-    // Use setTimeout to allow UI to update before heavy computation
+    // Let the "running" state paint before the heavy synchronous work
     setTimeout(() => {
       try {
         const results = runMonteCarloSimulation(
@@ -141,143 +114,194 @@ export default function RentVsMortgageCalculator() {
           rentInputs,
           investmentInputs,
           timeHorizon,
-          5000
+          MONTE_CARLO_ITERATIONS
         );
         setMonteCarloRun({ results, inputsKey });
       } finally {
         setMonteCarloRunning(false);
       }
-    }, 100);
+    }, 30);
   };
 
-  const loanAmount = propertyInputs.propertyPrice - propertyInputs.deposit + (propertyInputs.lmi ?? 0);
-  const interestRateForPayment = isScenarioValue(propertyInputs.interestRate)
-    ? propertyInputs.interestRate.baseline
-    : propertyInputs.interestRate;
-  const monthlyMortgage = calculateMortgagePayment(
-    loanAmount,
-    interestRateForPayment,
+  const openRisk = () => {
+    setView('risk');
+    window.scrollTo({ top: 0 });
+    if (!monteCarloRun || monteCarloStale) runMonteCarlo();
+  };
+
+  const resetInputs = () => {
+    setPropertyInputs(DEFAULT_PROPERTY);
+    setRentInputs(DEFAULT_RENT);
+    setInvestmentInputs(DEFAULT_INVESTMENT);
+    setTimeHorizon(DEFAULT_HORIZON);
+    setFocusMetric(null);
+  };
+
+  const openFocus = (metric: string | null) => {
+    setFocusMetric(metric);
+    if (metric) {
+      setView('dashboard');
+      requestAnimationFrame(() => document.getElementById('explore')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
+  };
+
+  const monthlyRepayment = calculateMortgagePayment(
+    propertyInputs.propertyPrice - propertyInputs.deposit + (propertyInputs.lmi ?? 0),
+    resolveScenarioValue(propertyInputs.interestRate, 'baseline'),
     propertyInputs.loanTerm
   );
+  const buyWins = final.rentNetPositionAfterTax < final.mortgageNetPositionAfterSale;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto min-h-screen bg-primary">
-      <h1 className="text-4xl font-bold mb-8 text-accent">
-        AU Rent vs Mortgage Calculator
-      </h1>
-      <ScenarioToggle enabled={scenarioMode} onChange={setScenarioMode} />
-      <label className="flex items-center gap-3 mb-6 text-sm text-text-secondary cursor-pointer w-fit">
-        <input
-          type="checkbox"
-          checked={realTerms}
-          onChange={(e) => setRealTerms(e.target.checked)}
-          className="h-4 w-4 accent-[var(--color-accent)]"
-        />
-        Show results in today's dollars (adjusted for {inflationRate}% inflation)
-      </label>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <PropertyInputsCard
-          inputs={propertyInputs}
-          onChange={setPropertyInputs}
-          monthlyPayment={monthlyMortgage}
-          scenarioMode={scenarioMode}
-          focusMetric={focusMetric}
-          onFocusMetric={setFocusMetric}
-          allInputs={{ propertyInputs, rentInputs, investmentInputs, timeHorizon }}
-        />
-        <RentInputsCard
-          inputs={rentInputs}
-          onChange={setRentInputs}
-          monthlyCostGap={monthlyCostGap}
-          scenarioMode={scenarioMode}
-          focusMetric={focusMetric}
-          onFocusMetric={setFocusMetric}
-          allInputs={{ propertyInputs, rentInputs, investmentInputs, timeHorizon }}
-        />
-        <InvestmentInputsCard
-          inputs={investmentInputs}
-          onChange={setInvestmentInputs}
-          timeHorizon={timeHorizon}
-          onTimeHorizonChange={setTimeHorizon}
-          scenarioMode={scenarioMode}
-          focusMetric={focusMetric}
-          onFocusMetric={setFocusMetric}
-          allInputs={{ propertyInputs, rentInputs, investmentInputs, timeHorizon }}
-        />
-      </div>
-      {scenarioMode && hasScenarioValues && results ? (
-        <>
-          <ResultsSummary
-            timeHorizon={timeHorizon}
-            scenarioResults={results}
-            breakEvenResults={breakEvenResults}
-            crossoverYear={crossoverYear}
-          />
-          <ComparisonChart scenarioResults={results} />
-        </>
-      ) : singleResults ? (
-        <>
-          <ResultsSummary
-            timeHorizon={timeHorizon}
-            finalResult={singleResults[singleResults.length - 1]}
-            advantageBeforeTax={
-              singleResults[singleResults.length - 1].rentNetPosition -
-              singleResults[singleResults.length - 1].mortgageNetPosition
-            }
-            advantageAfterTax={
-              singleResults[singleResults.length - 1].rentNetPositionAfterTax -
-              singleResults[singleResults.length - 1].mortgageNetPositionAfterSale
-            }
-            breakEvenResults={breakEvenResults}
-            crossoverYear={crossoverYear}
-          />
-          <ComparisonChart results={singleResults} />
-        </>
-      ) : null}
-
-      {/* Monte Carlo Section */}
-      <div className="p-6 rounded-lg shadow-xl bg-card border-l-4 border-purple-500 mb-6">
-        <h2 className="text-xl font-semibold mb-4 text-accent">Monte Carlo Simulation</h2>
-        <p className="text-sm text-text-secondary mb-4">
-          Run thousands of simulated economic paths to understand the probability distribution of outcomes.
-          Each path draws its own long-run averages plus correlated year-to-year swings in interest rates,
-          stock returns, property growth and rent increases, so it captures sequence-of-returns risk and
-          variable mortgage rates.
-        </p>
-        {!monteCarloResults ? (
-          <button
-            onClick={handleRunMonteCarlo}
-            disabled={monteCarloRunning}
-            className="px-6 py-3 bg-accent text-white font-semibold rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {monteCarloRunning ? 'Running 5,000 Simulations...' : 'Run Monte Carlo Analysis'}
-          </button>
-        ) : (
-          <div>
-            <button
-              onClick={handleRunMonteCarlo}
-              disabled={monteCarloRunning}
-              className="px-6 py-3 bg-accent/70 text-white font-semibold rounded-lg hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-4"
-            >
-              {monteCarloRunning ? 'Running...' : 'Re-run Analysis'}
-            </button>
-            <button
-              onClick={() => setMonteCarloRun(null)}
-              className="ml-4 px-6 py-3 bg-card border border-border text-text-primary font-semibold rounded-lg hover:bg-card/80 transition-colors"
-            >
-              Clear Results
-            </button>
-            {monteCarloStale && (
-              <p className="text-sm text-amber-400">
-                Inputs have changed since this simulation ran. Re-run to update the results.
-              </p>
+    <div className="min-h-screen bg-ground pb-24 text-ink lg:pb-0">
+      <header className="border-b border-line">
+        <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="flex items-center gap-4">
+            {view === 'risk' && (
+              <button
+                type="button"
+                onClick={() => setView('dashboard')}
+                className="min-h-9 rounded-lg border border-line px-3 text-[13px] text-ink-2 hover:text-ink"
+              >
+                ← Dashboard
+              </button>
             )}
+            <div className="flex items-baseline gap-3">
+              <span className="text-xl font-bold tracking-tight">{view === 'risk' ? 'Risk' : 'Rent or Buy'}</span>
+              <span className="hidden text-[13px] text-ink-2 sm:inline">
+                {view === 'risk'
+                  ? `${MONTE_CARLO_ITERATIONS.toLocaleString('en-AU')} simulated futures · baseline assumptions`
+                  : 'Australian net worth comparison'}
+              </span>
+            </div>
           </div>
-        )}
-      </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {view === 'dashboard' ? (
+              <Segmented
+                label="Scenario mode"
+                value={scenarioMode}
+                onChange={setScenarioMode}
+                options={[{ value: false, label: 'Single' }, { value: true, label: '3 scenarios' }]}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={runMonteCarlo}
+                disabled={monteCarloRunning}
+                className="min-h-9 rounded-lg border border-line-strong bg-surface px-3.5 text-[13px] font-semibold disabled:opacity-50"
+              >
+                {monteCarloRunning ? 'Running…' : 'Re-run'}
+              </button>
+            )}
+            <Segmented
+              label="Dollar basis"
+              value={realTerms}
+              onChange={setRealTerms}
+              options={[{ value: false, label: 'Future $' }, { value: true, label: "Today's $" }]}
+            />
+          </div>
+        </div>
+      </header>
 
-      {monteCarloResults && (
-        <MonteCarloView results={monteCarloResults} timeHorizon={timeHorizon} />
+      {view === 'risk' ? (
+        <main className="mx-auto max-w-[1240px] px-4 py-10 sm:px-6">
+          <RiskView
+            results={monteCarloResults}
+            running={monteCarloRunning}
+            stale={monteCarloStale}
+            timeHorizon={timeHorizon}
+            realTerms={realTerms}
+            onRerun={runMonteCarlo}
+          />
+        </main>
+      ) : (
+        <div className="mx-auto grid max-w-[1360px] grid-cols-1 items-start gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(340px,390px)_minmax(0,1fr)]">
+          <div className="order-2 lg:sticky lg:top-6 lg:order-1 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:rounded-xl">
+            <AssumptionsPanel
+              propertyInputs={propertyInputs}
+              rentInputs={rentInputs}
+              investmentInputs={investmentInputs}
+              timeHorizon={timeHorizon}
+              onPropertyChange={setPropertyInputs}
+              onRentChange={setRentInputs}
+              onInvestmentChange={setInvestmentInputs}
+              onTimeHorizonChange={setTimeHorizon}
+              onReset={resetInputs}
+              scenarioMode={scenarioMode}
+              focusMetric={focusMetric}
+              onFocusMetric={openFocus}
+              monthlyRepayment={monthlyRepayment}
+            />
+          </div>
+
+          <main className="order-1 flex min-w-0 flex-col gap-6 lg:order-2">
+            <Verdict
+              final={final}
+              timeHorizon={timeHorizon}
+              crossoverYear={crossoverYear}
+              breakEvens={breakEvenResults.results}
+              realTerms={realTerms}
+            />
+            <KeyFigures
+              baseline={baseline}
+              scenarioResults={scenarios}
+              crossoverYear={crossoverYear}
+              timeHorizon={timeHorizon}
+              monteCarloBuyProbability={monteCarloRun && !monteCarloStale ? monteCarloRun.results.buyBetterProbability : null}
+              onOpenRisk={openRisk}
+            />
+            {focusMetric && (
+              <div id="explore" className="scroll-mt-6">
+                <FocusAnalysis
+                  key={focusMetric}
+                  metricKey={focusMetric}
+                  propertyInputs={propertyInputs}
+                  rentInputs={rentInputs}
+                  investmentInputs={investmentInputs}
+                  timeHorizon={timeHorizon}
+                  onClose={() => setFocusMetric(null)}
+                />
+              </div>
+            )}
+            <OutcomeChart baseline={baseline} scenarioResults={scenarios} crossoverYear={crossoverYear} />
+            <PortfolioComparison
+              propertyInputs={propertyInputs}
+              rentInputs={rentInputs}
+              investmentInputs={investmentInputs}
+              timeHorizon={timeHorizon}
+              onSelect={(id) => {
+                const preset = PORTFOLIOS.find((x) => x.id === id);
+                if (preset) setInvestmentInputs(applyPortfolio(investmentInputs, preset));
+              }}
+            />
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <MoneyBreakdown final={final} timeHorizon={timeHorizon} />
+              <FlipList breakEvens={breakEvenResults.results} buyWins={buyWins} onExplore={openFocus} />
+            </div>
+            <p className="m-0 max-w-3xl text-xs leading-relaxed text-muted">
+              Both households start with the same savings and spend the same each month. Whichever option is cheaper that
+              month invests the difference. Figures are estimates, not financial advice.
+            </p>
+          </main>
+        </div>
+      )}
+
+      {view === 'dashboard' && (
+        <div className="fixed inset-x-0 bottom-0 z-10 flex gap-2.5 border-t border-line bg-ground/95 px-4 pt-3 pb-5 backdrop-blur lg:hidden">
+          <a
+            href="#assumptions"
+            className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-ink text-[15px] font-semibold text-ground no-underline"
+          >
+            Edit assumptions
+          </a>
+          <button
+            type="button"
+            onClick={openRisk}
+            className="min-h-12 rounded-xl border border-line-strong bg-surface px-4 text-sm font-semibold"
+          >
+            Risk
+          </button>
+        </div>
       )}
     </div>
   );
