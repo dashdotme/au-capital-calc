@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { formatCompactValue } from '../utils/focusRanges';
-import { FOCUS_RAMP } from './chartTheme';
+import { useChart } from './chartTheme';
 
 interface FocusSliderProps {
   values: number[];
@@ -13,6 +13,7 @@ interface FocusSliderProps {
 
 /** Five ordered handles on one track; pointer events so it works with touch too. */
 export default function FocusSlider({ values, onChange, unit, min = 0, max = 15, label }: FocusSliderProps) {
+  const { FOCUS_RAMP } = useChart();
   const [dragging, setDragging] = useState<number | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const step = unit === '$' ? 50 : 0.05;

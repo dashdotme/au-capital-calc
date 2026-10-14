@@ -48,13 +48,12 @@ The application follows a unidirectional data flow:
 
 ### Component Structure
 
-- `RentVsMortgageCalculator.tsx` - Root component managing all state
-- `PropertyInputsCard.tsx` - Mortgage, property costs, offset account
-- `RentInputsCard.tsx` - Rent parameters and moving costs
-- `InvestmentInputsCard.tsx` - Market returns, dividends, franking, tax rates
-- `ResultsSummary.tsx` - Final wealth comparison
-- `ComparisonChart.tsx` - Recharts visualization of wealth trajectories
-- `InputField.tsx` - Reusable controlled input component
+- `RentVsMortgageCalculator.tsx` - Root: all state, derived results, URL/localStorage sync, theme, and the three views
+- **Simple view** (default): `SentenceView.tsx` - the scenario as an editable sentence (`SentencePill.tsx` popovers), a plain-language answer from `utils/narrative.ts`, an "if you sold earlier" chart, why-cards and optional panels; `GuidedFlow.tsx` is the opt-in four-question first-visit flow
+- **Ledger view**: `AssumptionsPanel.tsx` sidebar plus `LedgerTable.tsx` (line-by-line buy vs rent at the sell year), `KeyFigures`, `OutcomeChart`, `FocusAnalysis` (Explore), `FlipList`
+- **Risk view**: `RiskView.tsx` (Monte Carlo, run in `utils/monteCarlo.worker.ts`)
+- Shared cards: `GapExplainer`, `PortfolioComparison`, `Affordability`, `SavedScenarios`; `PrintReport.tsx` renders only when printing (Export PDF)
+- `chartTheme.ts` - light/dark palettes; charts read colours through `useChart()` and `ThemeContext`, CSS tokens switch on `html[data-theme]`
 
 ### Technology Stack
 

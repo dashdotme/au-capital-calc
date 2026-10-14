@@ -8,7 +8,10 @@ import { flipDistance, formatMetricValue } from '../utils/flip';
 import { formatAdvantage, formatCompactCurrency, formatCurrency, formatPercent } from '../utils/format';
 import { CITIES } from '../cities';
 import { PORTFOLIOS } from '../portfolios';
-import { SERIES, niceTicks, yearTicks } from './chartTheme';
+import { PALETTES, niceTicks, yearTicks } from './chartTheme';
+
+// The printed report is always light, whatever the screen theme
+const SERIES = PALETTES.light.SERIES;
 
 interface PrintReportProps {
   state: SharedState;

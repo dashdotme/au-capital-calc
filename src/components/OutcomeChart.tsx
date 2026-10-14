@@ -14,7 +14,7 @@ import {
 import type { ScenarioResults, YearlySnapshot } from '../types';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { formatAdvantage, formatCompactCurrency, formatCurrency } from '../utils/format';
-import { INK, SERIES, axisProps, gridProps, niceTicks, tooltipProps, yearTicks } from './chartTheme';
+import { niceTicks, useChart, yearTicks } from './chartTheme';
 
 interface OutcomeChartProps {
   baseline: YearlySnapshot[];
@@ -57,6 +57,7 @@ export default function OutcomeChart({
 }: OutcomeChartProps) {
   const [view, setView] = useState<View>('advantage');
   const wide = useMediaQuery('(min-width: 640px)');
+  const { INK, SERIES, axisProps, gridProps, tooltipProps } = useChart();
   const margin = { top: 28, right: wide ? 96 : 12, bottom: 4, left: 4 };
   const lastIndex = baseline.length - 1;
 

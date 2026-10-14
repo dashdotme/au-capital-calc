@@ -4,6 +4,21 @@
   --font-sans: 'Instrument Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
+  /* Light is the default theme; dark overrides these below */
+  --color-ground: #f7f6f3;
+  --color-surface: #ffffff;
+  --color-raised: #efece6;
+  --color-line: #e6e3dc;
+  --color-line-strong: #d9d6cf;
+  --color-ink: #1f2430;
+  --color-ink-2: #4a5060;
+  --color-muted: #6b7080;
+  --color-buy: #9a8358;
+  --color-rent: #7356c2;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
   --color-ground: #0b1220;
   --color-surface: #111b2e;
   --color-raised: #1a2942;
@@ -18,7 +33,7 @@
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   body {
@@ -117,5 +132,31 @@
 
   .print-section {
     break-inside: avoid;
+  }
+}
+
+@layer components {
+  /* An editable value inside the Simple view's sentence */
+  .sentence-pill {
+    display: inline;
+    margin: 0;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    font: inherit;
+    font-weight: 600;
+    color: var(--color-ink);
+    text-decoration: underline;
+    text-decoration-color: var(--color-rent);
+    text-decoration-thickness: 3px;
+    text-underline-offset: 0.22em;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+
+  .sentence-pill:hover,
+  .sentence-pill[aria-expanded='true'] {
+    background-color: var(--color-raised);
   }
 }

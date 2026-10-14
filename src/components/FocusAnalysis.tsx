@@ -6,7 +6,7 @@ import { getMetricValue, runFocusComparison } from '../utils/calculations';
 import { calculateFocusRange, formatCompactValue, getMetricLabel, getMetricUnit } from '../utils/focusRanges';
 import { formatAdvantage, formatCompactCurrency } from '../utils/format';
 import FocusSlider from './FocusSlider';
-import { FOCUS_RAMP, INK, axisProps, gridProps, tooltipProps, yearTicks } from './chartTheme';
+import { useChart, yearTicks } from './chartTheme';
 
 interface FocusAnalysisProps {
   metricKey: string;
@@ -28,6 +28,7 @@ export default function FocusAnalysis({
   onClose,
 }: FocusAnalysisProps) {
   const wide = useMediaQuery('(min-width: 640px)');
+  const { FOCUS_RAMP, INK, axisProps, gridProps, tooltipProps } = useChart();
   const baselineValue = getMetricValue(propertyInputs, rentInputs, investmentInputs, metricKey);
   const defaultRange = calculateFocusRange(metricKey, baselineValue);
   const [sliderValues, setSliderValues] = useState<number[]>([

@@ -16,7 +16,7 @@ import {
 import type { MonteCarloResults } from '../types';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { formatAdvantage, formatPercent } from '../utils/format';
-import { INK, MONO, SERIES, axisProps, gridProps, niceTicks, tooltipProps, yearTicks } from './chartTheme';
+import { MONO, niceTicks, useChart, yearTicks } from './chartTheme';
 
 interface RiskViewProps {
   results: MonteCarloResults | null;
@@ -29,6 +29,7 @@ interface RiskViewProps {
 
 /** Pill-shaped label pinned near the top of a vertical reference line. */
 function MarkerPill({ viewBox, text, top, filled }: { viewBox?: { x?: number; y?: number }; text: string; top: number; filled: boolean }) {
+  const { INK } = useChart();
   if (!viewBox || viewBox.x === undefined) return null;
   const width = text.length * 7.2 + 20;
   const y = (viewBox.y ?? 0) + top;
@@ -88,6 +89,7 @@ function SpreadStrip({ percentiles }: { percentiles: MonteCarloResults['percenti
 
 export default function RiskView({ results, running, stale, timeHorizon, realTerms, onRerun }: RiskViewProps) {
   const wide = useMediaQuery('(min-width: 640px)');
+  const { INK, SERIES, axisProps, gridProps, tooltipProps } = useChart();
   if (!results) {
     return (
       <div className="card flex min-h-[320px] flex-col items-center justify-center gap-4 px-6 text-center">

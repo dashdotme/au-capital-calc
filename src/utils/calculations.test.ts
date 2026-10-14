@@ -253,3 +253,24 @@ describe('gap explanation', async () => {
     expect(total).toBeCloseTo(s.mortgageNetPositionAfterSale - s.rentNetPositionAfterTax, 2);
   });
 });
+
+describe('narrative', async () => {
+  const { describeFlip, describeTiming, flipPhrase, winnerAt } = await import('./narrative');
+
+  it('phrases break-evens in the right direction', () => {
+    const base = { metric: '', exists: true, currentFavorsBuy: false, interpretation: '' };
+    expect(flipPhrase({ ...base, metricKey: 'monthlyRent', currentValue: 3060, breakEvenValue: 3409.11 }))
+      .toBe('rent were above $3,409 a month');
+    expect(flipPhrase({ ...base, metricKey: 'interestRate', currentValue: 5.75, breakEvenValue: 4.6123 }))
+      .toBe('mortgage rates averaged below 4.61%');
+    expect(describeFlip([], 'rent')).toMatch(/No single assumption/);
+  });
+
+  it('describes when the winner takes the lead', () => {
+    const results = runComparison(property, rent, investment, 30);
+    const year = 30;
+    const text = describeTiming(results, year);
+    const winner = winnerAt(results[year]);
+    expect(text.startsWith(winner === 'rent' ? 'Renting' : winner === 'buy' ? 'Buying' : 'The two')).toBe(true);
+  });
+});
