@@ -7,7 +7,8 @@ import { isScenarioValue } from '../utils/calculations';
 interface RentInputsCardProps {
   inputs: RentInputs;
   onChange: (inputs: RentInputs) => void;
-  monthlySavings: number;
+  /** Owner's first-year monthly housing cost minus the renter's */
+  monthlyCostGap: number;
   scenarioMode: boolean;
   focusMetric: string | null;
   onFocusMetric: (metric: string | null) => void;
@@ -22,7 +23,7 @@ interface RentInputsCardProps {
 export default function RentInputsCard({
   inputs,
   onChange,
-  monthlySavings,
+  monthlyCostGap,
   scenarioMode,
   focusMetric,
   onFocusMetric,
@@ -107,12 +108,14 @@ export default function RentInputsCard({
       />
 
       <div className="mt-6 pt-6 border-t border-border">
-        <p className="text-sm text-text-secondary">Monthly Savings vs Mortgage:</p>
+        <p className="text-sm text-text-secondary">
+          {monthlyCostGap >= 0 ? 'Renting saves (year 1):' : 'Owning saves (year 1):'}
+        </p>
         <p className="text-2xl font-semibold mt-1 text-accent">
-          ${monthlySavings.toFixed(0)}
+          ${Math.abs(monthlyCostGap).toFixed(0)}/month
         </p>
         <p className="text-xs mt-2 text-text-secondary opacity-70">
-          Invested in stock market each month
+          Compared with all ownership costs. Whichever option is cheaper invests the difference each month.
         </p>
       </div>
     </div>

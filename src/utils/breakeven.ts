@@ -1,19 +1,7 @@
-import type { PropertyInputs, RentInputs, InvestmentInputs } from '../types';
-import { runComparison, isScenarioValue } from './calculations';
+import type { PropertyInputs, RentInputs, InvestmentInputs, BreakEvenResult, BreakEvenResults } from '../types';
+import { runComparison, finalAdvantage, getMetricValue, withMetric } from './calculations';
 
-export interface BreakEvenResult {
-  metric: string;
-  currentValue: number;
-  breakEvenValue: number | null;
-  exists: boolean;
-  currentFavorsBuy: boolean;
-  interpretation: string;
-}
-
-export interface BreakEvenResults {
-  results: BreakEvenResult[];
-  timeHorizon: number;
-}
+export type { BreakEvenResult, BreakEvenResults } from '../types';
 
 /**
  * Calculate the wealth difference (Rent - Buy) at a specific parameter value
@@ -26,44 +14,9 @@ function calculateDifference(
   metricKey: string,
   value: number
 ): number {
-  let modifiedPropertyInputs = { ...propertyInputs };
-  let modifiedRentInputs = { ...rentInputs };
-  let modifiedInvestmentInputs = { ...investmentInputs };
-
-  // Update the specific metric
-  switch (metricKey) {
-    case 'interestRate':
-      modifiedPropertyInputs = { ...propertyInputs, interestRate: value };
-      break;
-    case 'maintenanceRate':
-      modifiedPropertyInputs = { ...propertyInputs, maintenanceRate: value };
-      break;
-    case 'monthlyRent':
-      modifiedRentInputs = { ...rentInputs, monthlyRent: value };
-      break;
-    case 'rentIncreaseRate':
-      modifiedRentInputs = { ...rentInputs, rentIncreaseRate: value };
-      break;
-    case 'stockMarketReturn':
-      modifiedInvestmentInputs = { ...investmentInputs, stockMarketReturn: value };
-      break;
-    case 'propertyGrowthRate':
-      modifiedInvestmentInputs = { ...investmentInputs, propertyGrowthRate: value };
-      break;
-    case 'dividendYield':
-      modifiedInvestmentInputs = { ...investmentInputs, dividendYield: value };
-      break;
-  }
-
-  const results = runComparison(
-    modifiedPropertyInputs,
-    modifiedRentInputs,
-    modifiedInvestmentInputs,
-    years
+  return finalAdvantage(
+    runComparison(...withMetric(propertyInputs, rentInputs, investmentInputs, metricKey, value), years)
   );
-
-  const finalResult = results[results.length - 1];
-  return finalResult.rentNetPositionAfterTax - finalResult.mortgageNetPositionAfterSale;
 }
 
 /**
@@ -216,34 +169,18 @@ export function calculateBreakEven(
   investmentInputs: InvestmentInputs,
   years: number
 ): BreakEvenResults {
-  // Get current baseline values
-  const currentInterestRate = isScenarioValue(propertyInputs.interestRate)
-    ? propertyInputs.interestRate.baseline
-    : propertyInputs.interestRate;
-  const currentRentIncrease = isScenarioValue(rentInputs.rentIncreaseRate)
-    ? rentInputs.rentIncreaseRate.baseline
-    : rentInputs.rentIncreaseRate;
-  const currentStockReturn = isScenarioValue(investmentInputs.stockMarketReturn)
-    ? investmentInputs.stockMarketReturn.baseline
-    : investmentInputs.stockMarketReturn;
-  const currentPropertyGrowth = isScenarioValue(investmentInputs.propertyGrowthRate)
-    ? investmentInputs.propertyGrowthRate.baseline
-    : investmentInputs.propertyGrowthRate;
-
-  // Get current difference to determine which strategy is currently favored
-  const baselineResults = runComparison(propertyInputs, rentInputs, investmentInputs, years);
-  const finalResult = baselineResults[baselineResults.length - 1];
-  const currentDifference = finalResult.rentNetPositionAfterTax - finalResult.mortgageNetPositionAfterSale;
+  const currentDifference = finalAdvantage(runComparison(propertyInputs, rentInputs, investmentInputs, years));
+  const currentFavorsBuy = currentDifference < 0;
 
   const metrics = [
-    { key: 'interestRate', current: currentInterestRate },
-    { key: 'maintenanceRate', current: propertyInputs.maintenanceRate },
-    { key: 'monthlyRent', current: rentInputs.monthlyRent },
-    { key: 'rentIncreaseRate', current: currentRentIncrease },
-    { key: 'stockMarketReturn', current: currentStockReturn },
-    { key: 'propertyGrowthRate', current: currentPropertyGrowth },
-    { key: 'dividendYield', current: investmentInputs.dividendYield ?? 0 },
-  ];
+    'interestRate',
+    'maintenanceRate',
+    'monthlyRent',
+    'rentIncreaseRate',
+    'stockMarketReturn',
+    'propertyGrowthRate',
+    'dividendYield',
+  ].map((key) => ({ key, current: getMetricValue(propertyInputs, rentInputs, investmentInputs, key) }));
 
   const results: BreakEvenResult[] = metrics.map(({ key, current }) => {
     const [min, max] = getSearchRange(key, current);
@@ -257,7 +194,6 @@ export function calculateBreakEven(
       max
     );
 
-    const currentFavorsBuy = currentDifference < 0;
     const interpretation = getInterpretation(key, current, breakEvenValue, currentFavorsBuy);
 
     return {

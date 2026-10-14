@@ -12,6 +12,7 @@ AU Capital Calc is a financial calculator comparing renting vs buying property i
 - `npm run build` - Type-check with TypeScript and build for production
 - `npm run lint` - Run ESLint on the codebase
 - `npm run preview` - Preview production build locally
+- `npm test` - Run engine invariant tests (`src/utils/calculations.test.ts`)
 
 ## Architecture
 
@@ -23,23 +24,27 @@ The application follows a unidirectional data flow:
 2. **Calculation Engine** (`utils/calculations.ts`): The `runComparison()` function processes all inputs and returns an array of `YearlySnapshot` objects spanning the entire time horizon
 3. **Results Display**: Components consume the snapshot array to render summaries and charts
 
+### Comparison Model (equal-budget net worth)
+
+- Both households start with the same capital: deposit + stamp duty + other costs + offset balance. The buyer spends it on the purchase and keeps the offset as cash; the renter invests all of it.
+- Each month both spend the same total: whichever option has lower housing costs that month invests the difference (the buyer gets a side portfolio once owning becomes cheaper, e.g. after the loan is paid off).
+- "Net position" fields are net worths, directly comparable. `...AfterSale` / `...AfterTax` liquidate everything: selling costs, property CGT, brokerage and stock CGT on gains over the true cost base.
+- Do not subtract costs paid from net worth: the equal-budget setup already accounts for them, and subtracting again double counts.
+
 ### Key Calculation Functions
 
-- `calculateMortgagePayment()` - Standard mortgage payment formula with monthly compounding
-- `calculateAmortization()` - Generates year-by-year loan balance, including offset account support
-- `calculateFrankingCredits()` - Models Australian dividend franking credits (company tax rate: 30%)
-- `runComparison()` - Main simulation loop that:
-  - Tracks property ownership costs (mortgage, maintenance, rates, insurance)
-  - Tracks rental costs with annual increases and periodic moving costs
-  - Simulates monthly investment contributions (rent savings) with dividend reinvestment
-  - Applies Australian capital gains tax (50% discount for assets held >12 months)
+- `runComparison()` - Monthly simulation returning one `YearlySnapshot` per year. Accepts optional per-year `RatePaths` (used by Monte Carlo); the loan is variable-rate and re-amortises when the rate changes.
+- `Portfolio` class - Share holdings with cost base, monthly total return split into dividends + price growth, franking credits (refunded when they exceed tax).
+- `withMetric()` / `getMetricValue()` - Shared single-metric overrides used by break-even and focus analysis.
+- `findBuyCrossoverYear()`, `toRealTerms()` - Crossover holding period and today's-dollars deflation.
+- `monteCarlo.ts` - Path-based simulation: each path samples long-run averages plus correlated annual shocks (Cholesky on `DEFAULT_CORRELATION_MATRIX`), seeded PRNG.
 
 ### Australian Tax Specifics
 
-The calculator implements Australian tax rules:
-- **Franking credits**: Dividend imputation system where franking credits can reduce tax or generate refunds if marginal rate < 30%
-- **CGT discount**: 50% capital gains discount applied to both property and stocks
-- **Marginal tax rate**: Applied to dividends and capital gains
+- **Stock return is total return** (dividends included); dividend yield only changes how much is taxed annually vs deferred as capital gains
+- **Franking credits**: grossed up at the 30% company rate; excess credits are refunded
+- **CGT discount**: 50% applied to property (cost base includes purchase and selling costs) and stocks
+- **Marginal tax rate**: stage 3 brackets including the 2% Medicare levy
 
 ### Component Structure
 

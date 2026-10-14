@@ -36,6 +36,10 @@ export default function PropertyInputsCard({
     onFocusMetric(focusMetric === metric ? null : metric);
   };
 
+  const lvr = inputs.propertyPrice > 0
+    ? ((inputs.propertyPrice - inputs.deposit) / inputs.propertyPrice) * 100
+    : 0;
+
   return (
     <div className="p-6 rounded-lg shadow-xl bg-card border-l-4 border-accent">
       <h2 className="text-xl font-semibold mb-6 text-accent">Property Purchase</h2>
@@ -50,7 +54,17 @@ export default function PropertyInputsCard({
         label="Deposit"
         value={inputs.deposit}
         onChange={(deposit) => onChange({ ...inputs, deposit })}
+        helpText={`LVR ${lvr.toFixed(1)}%${lvr > 80 ? ' - above 80%, so lenders usually charge LMI' : ''}`}
       />
+
+      {(lvr > 80 || (inputs.lmi ?? 0) > 0) && (
+        <InputField
+          label="Lenders Mortgage Insurance"
+          value={inputs.lmi ?? 0}
+          onChange={(lmi) => onChange({ ...inputs, lmi })}
+          helpText="Added to the loan. Ask your lender for a quote; first home buyer schemes can waive it."
+        />
+      )}
 
       {scenarioMode ? (
         <MultiInput
@@ -92,7 +106,7 @@ export default function PropertyInputsCard({
         label="Offset Account Balance"
         value={inputs.offsetAccountBalance ?? 0}
         onChange={(offsetAccountBalance) => onChange({ ...inputs, offsetAccountBalance })}
-        helpText="Savings kept in offset account to reduce interest charges"
+        helpText="Extra savings kept in an offset. The renter invests the same amount instead, so both start equal."
       />
 
       <InputField
@@ -172,7 +186,7 @@ export default function PropertyInputsCard({
 
       <div className="mt-6 pt-6 border-t border-border">
         <p className="text-sm text-text-secondary">
-          Monthly Payment:{' '}
+          Monthly Repayment:{' '}
           <strong className="text-2xl ml-2 text-accent">
             ${monthlyPayment.toFixed(0)}
           </strong>

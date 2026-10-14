@@ -1,5 +1,8 @@
 import type { PropertyInputs, RentInputs, InvestmentInputs, YearlySnapshot, ScenarioValue, ScenarioResults } from '../types';
 
+const COMPANY_TAX_RATE = 0.3;
+const CGT_DISCOUNT = 0.5;
+
 export function isScenarioValue(value: number | ScenarioValue): value is ScenarioValue {
   return typeof value === 'object' && 'pessimistic' in value && 'baseline' in value && 'optimistic' in value;
 }
@@ -18,285 +21,292 @@ export function calculateMortgagePayment(
 ): number {
   const monthlyRate = annualRate / 100 / 12;
   const numPayments = years * 12;
+  if (numPayments <= 0 || principal <= 0) return 0;
+  if (monthlyRate === 0) return principal / numPayments;
   return (
     (principal * (monthlyRate * Math.pow(1 + monthlyRate, numPayments))) /
     (Math.pow(1 + monthlyRate, numPayments) - 1)
   );
 }
 
-export function calculateAmortization(
-  principal: number,
-  annualRate: number,
-  years: number,
-  monthlyPayment: number,
-  offsetBalance: number
-): { balance: number; totalPaid: number; equity: number; totalInterest: number; totalPrincipal: number }[] {
-  const monthlyRate = annualRate / 100 / 12;
-  let balance = principal;
-  let totalPaid = 0;
-  let totalInterest = 0;
-  let totalPrincipal = 0;
-  const schedule = [];
+/**
+ * Optional per-year rate overrides (index 0 = year 1), used by the Monte Carlo
+ * simulation to model year-to-year volatility. Missing entries fall back to the
+ * constant input rate.
+ */
+export interface RatePaths {
+  interestRate?: number[];
+  stockMarketReturn?: number[];
+  propertyGrowthRate?: number[];
+  rentIncreaseRate?: number[];
+}
 
-  for (let month = 0; month <= years * 12; month++) {
-    if (month > 0 && balance > 0) {
-      const effectiveBalance = Math.max(0, balance - offsetBalance);
-      const interestPayment = effectiveBalance * monthlyRate;
-      const principalPayment = Math.min(monthlyPayment - interestPayment, balance);
+/**
+ * Share portfolio with an ATO-style cost base. Brokerage is paid on every buy and on
+ * the final sale; dividends are taxed at the marginal rate with franking credits
+ * offsetting tax (and refunded if they exceed it).
+ */
+class Portfolio {
+  value = 0;
+  costBase = 0;
+  cash = 0;
+  dividends = 0;
+  frankingCredits = 0;
+  private readonly feeRate: number;
+  private readonly taxRate: number;
 
-      balance = balance - principalPayment;
-      totalPaid += interestPayment + principalPayment;
-      totalInterest += interestPayment;
-      totalPrincipal += principalPayment;
-    }
+  constructor(feeRate: number, taxRate: number) {
+    this.feeRate = feeRate;
+    this.taxRate = taxRate;
+  }
 
-    if (month % 12 === 0) {
-      schedule.push({
-        balance,
-        totalPaid,
-        equity: principal - balance,
-        totalInterest,
-        totalPrincipal,
-      });
+  buy(amount: number) {
+    if (amount <= 0) return;
+    this.value += amount * (1 - this.feeRate);
+    this.costBase += amount;
+  }
+
+  /** One month of price growth plus dividends. Rates are annual decimals. */
+  grow(totalReturn: number, dividendYield: number, frankingLevel: number, reinvest: boolean) {
+    if (this.value <= 0) return;
+    // Split the monthly total return into dividends and price growth so the pre-tax
+    // compound return is exactly totalReturn regardless of yield.
+    const cashDividend = this.value * (dividendYield / 12);
+    const totalGrowth = Math.pow(Math.max(0, 1 + totalReturn), 1 / 12);
+    this.value *= Math.max(0, totalGrowth - dividendYield / 12);
+
+    if (cashDividend <= 0) return;
+    const franking = cashDividend * frankingLevel * (COMPANY_TAX_RATE / (1 - COMPANY_TAX_RATE));
+    const netTax = (cashDividend + franking) * this.taxRate - franking;
+    const afterTax = cashDividend - netTax;
+    this.dividends += afterTax;
+    this.frankingCredits += franking;
+    if (reinvest) {
+      this.buy(afterTax);
+    } else {
+      this.cash += afterTax;
     }
   }
 
-  return schedule;
-}
+  holdingValue(): number {
+    return this.value + this.cash;
+  }
 
-function calculateFrankingCredits(
-  portfolioValue: number,
-  dividendYield: number,
-  frankingLevel: number,
-  marginalTaxRate: number
-): {
-  grossDividends: number;
-  frankingCredits: number;
-  taxOnDividends: number;
-  netDividends: number;
-  frankingBenefit: number;
-} {
-  const companyTaxRate = 30;
-  const cashDividends = portfolioValue * (dividendYield / 100);
-  const frankedDividends = cashDividends * (frankingLevel / 100);
-  const frankingCredits = (frankedDividends / (1 - companyTaxRate / 100)) * (companyTaxRate / 100);
-  const grossDividends = cashDividends + frankingCredits;
-  const taxOnDividends = grossDividends * (marginalTaxRate / 100);
-  const netTaxPosition = taxOnDividends - frankingCredits;
-  const additionalTax = netTaxPosition > 0 ? netTaxPosition : 0;
-  const netDividends = cashDividends - additionalTax;
-
-  const frankingBenefit = marginalTaxRate > companyTaxRate
-    ? frankingCredits
-    : frankingCredits - Math.abs(netTaxPosition);
-
-  return {
-    grossDividends,
-    frankingCredits,
-    taxOnDividends,
-    netDividends,
-    frankingBenefit,
-  };
+  /** Value if everything were sold today, after brokerage and discounted CGT. */
+  liquidationValue(): number {
+    const proceeds = this.value * (1 - this.feeRate);
+    const gain = proceeds - this.costBase;
+    const tax = gain > 0 ? gain * CGT_DISCOUNT * this.taxRate : 0;
+    return proceeds - tax + this.cash;
+  }
 }
 
 export function runComparison(
   propertyInputs: PropertyInputs,
   rentInputs: RentInputs,
   investmentInputs: InvestmentInputs,
-  years: number
+  years: number,
+  paths: RatePaths = {}
 ): YearlySnapshot[] {
-  // Ensure we have numeric values (for when called directly or from scenario comparison)
-  const interestRate = typeof propertyInputs.interestRate === 'number'
-    ? propertyInputs.interestRate
-    : propertyInputs.interestRate.baseline;
-  const rentIncreaseRate = typeof rentInputs.rentIncreaseRate === 'number'
-    ? rentInputs.rentIncreaseRate
-    : rentInputs.rentIncreaseRate.baseline;
-  const stockMarketReturn = typeof investmentInputs.stockMarketReturn === 'number'
-    ? investmentInputs.stockMarketReturn
-    : investmentInputs.stockMarketReturn.baseline;
-  const propertyGrowthRate = typeof investmentInputs.propertyGrowthRate === 'number'
-    ? investmentInputs.propertyGrowthRate
-    : investmentInputs.propertyGrowthRate.baseline;
+  const baseInterestRate = resolveScenarioValue(propertyInputs.interestRate, 'baseline');
+  const baseRentIncrease = resolveScenarioValue(rentInputs.rentIncreaseRate, 'baseline');
+  const baseStockReturn = resolveScenarioValue(investmentInputs.stockMarketReturn, 'baseline');
+  const basePropertyGrowth = resolveScenarioValue(investmentInputs.propertyGrowthRate, 'baseline');
+  const rateFor = (path: number[] | undefined, year: number, fallback: number) =>
+    path?.[year - 1] ?? fallback;
 
-  const loanAmount = propertyInputs.propertyPrice - propertyInputs.deposit;
-  const monthlyMortgage = calculateMortgagePayment(
-    loanAmount,
-    interestRate,
-    propertyInputs.loanTerm
-  );
+  const marginalTaxRate = investmentInputs.marginalTaxRate / 100;
+  const feeRate = investmentInputs.stockTransactionCost / 100;
+  const inflation = investmentInputs.inflationRate / 100;
+  const dividendYield = (investmentInputs.dividendYield ?? 0) / 100;
+  const frankingLevel = (investmentInputs.frankingLevel ?? 0) / 100;
+  const reinvestDividends = investmentInputs.dividendReinvestment ?? true;
+  const offset = Math.max(0, propertyInputs.offsetAccountBalance ?? 0);
+  const totalMonths = Math.max(0, Math.round(propertyInputs.loanTerm * 12));
 
-  const amortization = calculateAmortization(
-    loanAmount,
-    interestRate,
-    propertyInputs.loanTerm,
-    monthlyMortgage,
-    propertyInputs.offsetAccountBalance ?? 0
-  );
-
+  // Both households start with the same capital: the buyer spends deposit + purchase
+  // costs on the property and parks savings in the offset; the renter invests all of it.
   const upfrontCosts = propertyInputs.stampDuty + propertyInputs.otherPurchaseCosts;
-  const initialCapital = propertyInputs.deposit + upfrontCosts;
-  const transactionCostRate = investmentInputs.stockTransactionCost / 100;
-  const initialInvestmentAfterFees = initialCapital * (1 - transactionCostRate);
+  const startingCapital = propertyInputs.deposit + upfrontCosts + offset;
+  const loanAmount = Math.max(0, propertyInputs.propertyPrice - propertyInputs.deposit + (propertyInputs.lmi ?? 0));
 
-  const results: YearlySnapshot[] = [];
-  let rentInvestment = initialInvestmentAfterFees;
-  let cumulativeRent = 0;
-  let currentRent = rentInputs.monthlyRent;
+  const renter = new Portfolio(feeRate, marginalTaxRate);
+  const buyer = new Portfolio(feeRate, marginalTaxRate);
+  renter.buy(startingCapital);
+
+  let balance = loanAmount;
+  let currentInterestRate = Number.NaN;
+  let monthlyPayment = 0;
+  let monthsElapsed = 0;
+  let propertyValue = propertyInputs.propertyPrice;
+  let monthlyRent = rentInputs.monthlyRent;
+
+  let totalPrincipalAndInterest = 0;
+  let totalInterest = 0;
   let cumulativeMaintenance = 0;
   let cumulativeRates = 0;
-  let cumulativeMovingCosts = 0;
   let cumulativeOwnerInsurance = 0;
+  let cumulativeRent = 0;
+  let cumulativeMovingCosts = 0;
   let cumulativeRenterInsurance = 0;
-  let cumulativeFrankingCredits = 0;
-  let cumulativeDividends = 0;
 
-  const dividendYield = investmentInputs.dividendYield ?? 0;
-  const frankingLevel = investmentInputs.frankingLevel ?? 0;
-  const dividendReinvestment = investmentInputs.dividendReinvestment ?? true;
-  const monthlyStockReturn = stockMarketReturn / 100 / 12;
+  const results: YearlySnapshot[] = [];
 
-  for (let year = 0; year <= years; year++) {
-    const propertyValue =
-      propertyInputs.propertyPrice *
-      Math.pow(1 + propertyGrowthRate / 100, year);
-
-    const mortgageData = amortization[year];
-    const annualMaintenance = propertyValue * (propertyInputs.maintenanceRate / 100);
-    const annualRates =
-      year === 0
-        ? propertyInputs.councilRates
-        : propertyInputs.councilRates *
-          Math.pow(1 + investmentInputs.inflationRate / 100, year);
-
-    const annualBuildingInsurance =
-      year === 0
-        ? propertyInputs.buildingInsurance
-        : propertyInputs.buildingInsurance *
-          Math.pow(1 + investmentInputs.inflationRate / 100, year);
-
-    const annualOwnerContentsInsurance =
-      year === 0
-        ? propertyInputs.contentsInsurance
-        : propertyInputs.contentsInsurance *
-          Math.pow(1 + investmentInputs.inflationRate / 100, year);
-
-    const annualRenterInsurance =
-      year === 0
-        ? rentInputs.contentsInsurance
-        : rentInputs.contentsInsurance *
-          Math.pow(1 + investmentInputs.inflationRate / 100, year);
-
-    if (year > 0) {
-      cumulativeMaintenance += annualMaintenance;
-      cumulativeRates += annualRates;
-      cumulativeOwnerInsurance += annualBuildingInsurance + annualOwnerContentsInsurance;
-      cumulativeRenterInsurance += annualRenterInsurance;
-
-      if (year % rentInputs.movingFrequency === 0) {
-        cumulativeMovingCosts += rentInputs.movingCost;
-      }
-    }
-
-    const totalOwnershipCosts =
-      upfrontCosts +
-      mortgageData.totalPaid +
-      cumulativeMaintenance +
-      cumulativeRates +
-      cumulativeOwnerInsurance;
-
-    const mortgageNetPosition = propertyValue - mortgageData.balance - totalOwnershipCosts;
+  const snapshot = (year: number, mortgageAnnualCost: number, rentAnnualCost: number) => {
     const sellingCosts = propertyValue * (propertyInputs.sellingCostRate / 100);
-    const capitalGain = propertyValue - propertyInputs.propertyPrice;
-    const discountedPropertyGain = capitalGain > 0 ? capitalGain * 0.5 : 0;
-    const capitalGainsTax = discountedPropertyGain * (propertyInputs.capitalGainsTaxRate / 100);
-
-    const mortgageNetPositionAfterSale =
-      propertyValue -
-      mortgageData.balance -
-      totalOwnershipCosts -
-      sellingCosts -
-      capitalGainsTax;
-
-    if (year > 0) {
-      const monthlyOwnershipCost =
-        monthlyMortgage +
-        annualMaintenance / 12 +
-        annualRates / 12 +
-        annualBuildingInsurance / 12 +
-        annualOwnerContentsInsurance / 12;
-
-      const monthlyRenterCosts = currentRent + annualRenterInsurance / 12;
-      const monthlySavings = monthlyOwnershipCost - monthlyRenterCosts;
-
-      let yearlyDividends = 0;
-      let yearlyFrankingCredits = 0;
-
-      if (dividendYield > 0) {
-        const dividendCalc = calculateFrankingCredits(
-          rentInvestment,
-          dividendYield,
-          frankingLevel,
-          investmentInputs.marginalTaxRate
-        );
-
-        yearlyDividends = dividendCalc.netDividends;
-        yearlyFrankingCredits = dividendCalc.frankingBenefit;
-        cumulativeDividends += yearlyDividends;
-        cumulativeFrankingCredits += yearlyFrankingCredits;
-      }
-
-      for (let month = 1; month <= 12; month++) {
-        rentInvestment = rentInvestment * (1 + monthlyStockReturn);
-        const contributionAfterFees = monthlySavings * (1 - transactionCostRate);
-        rentInvestment += contributionAfterFees;
-
-        if (dividendReinvestment && yearlyDividends > 0) {
-          const monthlyDividend = yearlyDividends / 12;
-          const dividendAfterFees = monthlyDividend * (1 - transactionCostRate);
-          rentInvestment += dividendAfterFees;
-        }
-      }
-
-      cumulativeRent += currentRent * 12;
-      currentRent = currentRent * (1 + rentIncreaseRate / 100);
-    }
-
-    const rentNetPosition =
-      rentInvestment - cumulativeRent - cumulativeMovingCosts - cumulativeRenterInsurance;
-
-    const stocksCapitalGain = rentInvestment - initialCapital - cumulativeDividends;
-    let stocksCapitalGainsTax = 0;
-    if (stocksCapitalGain > 0) {
-      const discountedGain = stocksCapitalGain * 0.5;
-      stocksCapitalGainsTax = discountedGain * (investmentInputs.marginalTaxRate / 100);
-    }
-
-    const rentNetPositionAfterTax = rentNetPosition - stocksCapitalGainsTax;
+    const propertyCostBase = propertyInputs.propertyPrice + upfrontCosts + sellingCosts;
+    const propertyGain = propertyValue - propertyCostBase;
+    const propertyCGT = propertyGain > 0
+      ? propertyGain * CGT_DISCOUNT * (propertyInputs.capitalGainsTaxRate / 100)
+      : 0;
+    const equity = propertyValue - balance;
 
     results.push({
       year,
-      mortgageEquity: mortgageData.equity,
-      mortgageTotalPaid: mortgageData.totalPaid + upfrontCosts,
+      mortgageEquity: equity,
+      mortgageTotalPaid: upfrontCosts + totalPrincipalAndInterest,
       mortgagePropertyValue: propertyValue,
-      mortgageNetPosition,
-      mortgageNetPositionAfterSale,
+      mortgageLoanBalance: balance,
+      mortgageInvestmentValue: buyer.holdingValue(),
+      mortgageNetPosition: equity + offset + buyer.holdingValue(),
+      mortgageNetPositionAfterSale:
+        equity - sellingCosts - propertyCGT + offset + buyer.liquidationValue(),
       mortgageMaintenance: cumulativeMaintenance,
       mortgageRates: cumulativeRates,
       mortgageInsurance: cumulativeOwnerInsurance,
-      mortgageTotalInterest: mortgageData.totalInterest,
+      mortgageTotalInterest: totalInterest,
+      mortgageAnnualCost,
       rentTotalPaid: cumulativeRent,
       rentMovingCosts: cumulativeMovingCosts,
       rentInsurance: cumulativeRenterInsurance,
-      rentInvestmentValue: rentInvestment,
-      rentNetPosition,
-      rentNetPositionAfterTax,
-      rentDividends: cumulativeDividends,
-      rentFrankingCredits: cumulativeFrankingCredits,
+      rentInvestmentValue: renter.holdingValue(),
+      rentNetPosition: renter.holdingValue(),
+      rentNetPositionAfterTax: renter.liquidationValue(),
+      rentDividends: renter.dividends,
+      rentFrankingCredits: renter.frankingCredits,
+      rentAnnualCost,
     });
+  };
+
+  snapshot(0, 0, 0);
+
+  for (let year = 1; year <= years; year++) {
+    const interestRate = rateFor(paths.interestRate, year, baseInterestRate);
+    const stockReturn = rateFor(paths.stockMarketReturn, year, baseStockReturn) / 100;
+    const propertyGrowth = rateFor(paths.propertyGrowthRate, year, basePropertyGrowth) / 100;
+    const rentIncrease = rateFor(paths.rentIncreaseRate, year, baseRentIncrease) / 100;
+
+    // Variable-rate loan: when the rate changes, the bank re-amortises the remaining
+    // balance over the remaining term.
+    if (interestRate !== currentInterestRate) {
+      currentInterestRate = interestRate;
+      monthlyPayment = calculateMortgagePayment(
+        balance,
+        interestRate,
+        (totalMonths - monthsElapsed) / 12
+      );
+    }
+
+    const priceIndex = Math.pow(1 + inflation, year - 1);
+    const annualRates = propertyInputs.councilRates * priceIndex;
+    const annualOwnerInsurance =
+      (propertyInputs.buildingInsurance + propertyInputs.contentsInsurance) * priceIndex;
+    const annualRenterInsurance = rentInputs.contentsInsurance * priceIndex;
+    const movesThisYear = rentInputs.movingFrequency > 0 && year % rentInputs.movingFrequency === 0;
+    const movingCost = movesThisYear ? rentInputs.movingCost * priceIndex : 0;
+    const monthlyPropertyGrowth = Math.pow(1 + propertyGrowth, 1 / 12) - 1;
+
+    let mortgageAnnualCost = 0;
+    let rentAnnualCost = 0;
+
+    for (let month = 1; month <= 12; month++) {
+      let loanPayment = 0;
+      if (balance > 0.005) {
+        const interest = Math.max(0, balance - offset) * (currentInterestRate / 100 / 12);
+        const principal = Math.min(Math.max(0, monthlyPayment - interest), balance);
+        balance -= principal;
+        loanPayment = interest + principal;
+        totalInterest += interest;
+        totalPrincipalAndInterest += loanPayment;
+      } else {
+        balance = 0;
+      }
+      monthsElapsed++;
+
+      const maintenance = propertyValue * (propertyInputs.maintenanceRate / 100 / 12);
+      cumulativeMaintenance += maintenance;
+      const ownerCost = loanPayment + maintenance + annualRates / 12 + annualOwnerInsurance / 12;
+
+      const renterMoving = month === 12 ? movingCost : 0;
+      const renterCost = monthlyRent + annualRenterInsurance / 12 + renterMoving;
+
+      // Grow existing holdings, then invest whatever the cheaper option saved this month.
+      renter.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
+      buyer.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
+      if (ownerCost > renterCost) {
+        renter.buy(ownerCost - renterCost);
+      } else {
+        buyer.buy(renterCost - ownerCost);
+      }
+
+      propertyValue *= 1 + monthlyPropertyGrowth;
+      cumulativeRent += monthlyRent;
+      mortgageAnnualCost += ownerCost;
+      rentAnnualCost += renterCost;
+    }
+
+    cumulativeRates += annualRates;
+    cumulativeOwnerInsurance += annualOwnerInsurance;
+    cumulativeRenterInsurance += annualRenterInsurance;
+    cumulativeMovingCosts += movingCost;
+    monthlyRent *= 1 + rentIncrease;
+
+    snapshot(year, mortgageAnnualCost, rentAnnualCost);
   }
 
   return results;
+}
+
+/** Rent-minus-buy advantage after all exit costs and taxes (positive favours renting). */
+export function finalAdvantage(snapshots: YearlySnapshot[]): number {
+  const final = snapshots[snapshots.length - 1];
+  return final.rentNetPositionAfterTax - final.mortgageNetPositionAfterSale;
+}
+
+/**
+ * First year from which buying stays ahead of renting through to the end of the
+ * horizon (after exit costs and taxes), or null if it never does.
+ */
+export function findBuyCrossoverYear(snapshots: YearlySnapshot[]): number | null {
+  let crossover: number | null = null;
+  for (const s of snapshots) {
+    if (s.year === 0) continue;
+    if (s.mortgageNetPositionAfterSale >= s.rentNetPositionAfterTax) {
+      crossover ??= s.year;
+    } else {
+      crossover = null;
+    }
+  }
+  return crossover;
+}
+
+const MONETARY_KEYS = [
+  'mortgageEquity', 'mortgageTotalPaid', 'mortgagePropertyValue', 'mortgageLoanBalance',
+  'mortgageInvestmentValue', 'mortgageNetPosition', 'mortgageNetPositionAfterSale',
+  'mortgageMaintenance', 'mortgageRates', 'mortgageInsurance', 'mortgageTotalInterest',
+  'mortgageAnnualCost', 'rentTotalPaid', 'rentMovingCosts', 'rentInsurance',
+  'rentInvestmentValue', 'rentNetPosition', 'rentNetPositionAfterTax', 'rentDividends',
+  'rentFrankingCredits', 'rentAnnualCost',
+] as const satisfies readonly (keyof YearlySnapshot)[];
+
+/** Deflate every dollar figure to today's dollars. */
+export function toRealTerms(snapshots: YearlySnapshot[], inflationRate: number): YearlySnapshot[] {
+  return snapshots.map((s) => {
+    const factor = Math.pow(1 + inflationRate / 100, s.year);
+    const real = { ...s };
+    for (const key of MONETARY_KEYS) real[key] = s[key] / factor;
+    return real;
+  });
 }
 
 export function runScenarioComparison(
@@ -314,7 +324,6 @@ export function runScenarioComparison(
   };
 
   for (const scenario of scenarios) {
-    // Create resolved inputs for this scenario
     const resolvedPropertyInputs: PropertyInputs = {
       ...propertyInputs,
       interestRate: resolveScenarioValue(propertyInputs.interestRate, scenario),
@@ -342,11 +351,67 @@ export function runScenarioComparison(
   return results;
 }
 
-export interface FocusResults {
-  baseline: YearlySnapshot[];
-  scenarios: YearlySnapshot[][];
+export type MetricKey =
+  | 'interestRate'
+  | 'maintenanceRate'
+  | 'monthlyRent'
+  | 'rentIncreaseRate'
+  | 'stockMarketReturn'
+  | 'propertyGrowthRate'
+  | 'dividendYield';
+
+/** Return copies of the inputs with a single metric overridden. */
+export function withMetric(
+  propertyInputs: PropertyInputs,
+  rentInputs: RentInputs,
+  investmentInputs: InvestmentInputs,
+  metricKey: string,
+  value: number
+): [PropertyInputs, RentInputs, InvestmentInputs] {
+  switch (metricKey as MetricKey) {
+    case 'interestRate':
+    case 'maintenanceRate':
+      return [{ ...propertyInputs, [metricKey]: value }, rentInputs, investmentInputs];
+    case 'monthlyRent':
+    case 'rentIncreaseRate':
+      return [propertyInputs, { ...rentInputs, [metricKey]: value }, investmentInputs];
+    case 'stockMarketReturn':
+    case 'propertyGrowthRate':
+    case 'dividendYield':
+      return [propertyInputs, rentInputs, { ...investmentInputs, [metricKey]: value }];
+    default:
+      return [propertyInputs, rentInputs, investmentInputs];
+  }
 }
 
+/** Baseline value of a metric (scenario inputs resolve to their baseline). */
+export function getMetricValue(
+  propertyInputs: PropertyInputs,
+  rentInputs: RentInputs,
+  investmentInputs: InvestmentInputs,
+  metricKey: string
+): number {
+  switch (metricKey as MetricKey) {
+    case 'interestRate':
+      return resolveScenarioValue(propertyInputs.interestRate, 'baseline');
+    case 'maintenanceRate':
+      return propertyInputs.maintenanceRate;
+    case 'monthlyRent':
+      return rentInputs.monthlyRent;
+    case 'rentIncreaseRate':
+      return resolveScenarioValue(rentInputs.rentIncreaseRate, 'baseline');
+    case 'stockMarketReturn':
+      return resolveScenarioValue(investmentInputs.stockMarketReturn, 'baseline');
+    case 'propertyGrowthRate':
+      return resolveScenarioValue(investmentInputs.propertyGrowthRate, 'baseline');
+    case 'dividendYield':
+      return investmentInputs.dividendYield ?? 0;
+    default:
+      return 0;
+  }
+}
+
+/** One simulation per focus value, each with only that metric changed. */
 export function runFocusComparison(
   propertyInputs: PropertyInputs,
   rentInputs: RentInputs,
@@ -354,43 +419,8 @@ export function runFocusComparison(
   years: number,
   metricKey: string,
   values: number[]
-): FocusResults {
-  // Run baseline for the opposite strategy
-  const baseline = runComparison(propertyInputs, rentInputs, investmentInputs, years);
-
-  // Run scenarios for each of the 5 values
-  const scenarios = values.map((value) => {
-    // Create modified inputs based on the metric
-    let modifiedPropertyInputs = { ...propertyInputs };
-    let modifiedRentInputs = { ...rentInputs };
-    let modifiedInvestmentInputs = { ...investmentInputs };
-
-    switch (metricKey) {
-      case 'interestRate':
-        modifiedPropertyInputs = { ...propertyInputs, interestRate: value };
-        break;
-      case 'maintenanceRate':
-        modifiedPropertyInputs = { ...propertyInputs, maintenanceRate: value };
-        break;
-      case 'monthlyRent':
-        modifiedRentInputs = { ...rentInputs, monthlyRent: value };
-        break;
-      case 'rentIncreaseRate':
-        modifiedRentInputs = { ...rentInputs, rentIncreaseRate: value };
-        break;
-      case 'stockMarketReturn':
-        modifiedInvestmentInputs = { ...investmentInputs, stockMarketReturn: value };
-        break;
-      case 'propertyGrowthRate':
-        modifiedInvestmentInputs = { ...investmentInputs, propertyGrowthRate: value };
-        break;
-      case 'dividendYield':
-        modifiedInvestmentInputs = { ...investmentInputs, dividendYield: value };
-        break;
-    }
-
-    return runComparison(modifiedPropertyInputs, modifiedRentInputs, modifiedInvestmentInputs, years);
-  });
-
-  return { baseline, scenarios };
+): YearlySnapshot[][] {
+  return values.map((value) =>
+    runComparison(...withMetric(propertyInputs, rentInputs, investmentInputs, metricKey, value), years)
+  );
 }

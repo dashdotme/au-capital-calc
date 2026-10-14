@@ -48,7 +48,7 @@ export default function InvestmentInputsCard({
 
       {scenarioMode ? (
         <MultiInput
-          label="Stock Market Return (% p.a.)"
+          label="Stock Market Total Return (% p.a.)"
           value={
             isScenarioValue(inputs.stockMarketReturn)
               ? inputs.stockMarketReturn
@@ -59,7 +59,7 @@ export default function InvestmentInputsCard({
         />
       ) : (
         <InputField
-          label="Stock Market Return (% p.a.)"
+          label="Stock Market Total Return (% p.a.)"
           value={isScenarioValue(inputs.stockMarketReturn) ? inputs.stockMarketReturn.baseline : inputs.stockMarketReturn}
           onChange={(stockMarketReturn) => onChange({ ...inputs, stockMarketReturn })}
           onFocusMode={() => handleFocusMode('stockMarketReturn')}
@@ -80,7 +80,7 @@ export default function InvestmentInputsCard({
         label="Dividend Yield (% p.a.)"
         value={inputs.dividendYield ?? 0}
         onChange={(dividendYield) => onChange({ ...inputs, dividendYield })}
-        helpText="ASX average ~4%, US markets ~1.5 - 2%"
+        helpText="Part of the total return, not extra. ASX average ~4%, US markets ~1.5 - 2%. Higher yield means more tax drag."
         onFocusMode={() => handleFocusMode('dividendYield')}
       />
 
@@ -111,7 +111,7 @@ export default function InvestmentInputsCard({
           className="input-field"
         >
           <option value="true">Reinvest dividends</option>
-          <option value="false">Take as cash (not reinvested)</option>
+          <option value="false">Take as cash (held, not invested)</option>
         </select>
       </label>
 
@@ -156,7 +156,7 @@ export default function InvestmentInputsCard({
         label="Stock Transaction Costs (%)"
         value={inputs.stockTransactionCost}
         onChange={(stockTransactionCost) => onChange({ ...inputs, stockTransactionCost })}
-        helpText="Typical: 0.1 - 0.2% for index funds, 0.5%+ for active trading. Higher if investing abroad. Applied to each monthly contribution."
+        helpText="Typical: 0.1 - 0.2% for index funds, 0.5%+ for active trading. Higher if investing abroad. Applied to each purchase and the final sale."
       />
 
       <label className="block mb-4">
@@ -168,13 +168,13 @@ export default function InvestmentInputsCard({
           onChange={(e) => onChange({ ...inputs, marginalTaxRate: Number(e.target.value) })}
           className="input-field"
         >
-          <option value="19">19% ($18,201 - $45,000)</option>
-          <option value="32.5">32.5% ($45,001 - $135,000)</option>
-          <option value="37">37% ($135,001 - $190,000)</option>
-          <option value="45">45% ($190,001+)</option>
+          <option value="18">16% + 2% Medicare ($18,201 - $45,000)</option>
+          <option value="32">30% + 2% Medicare ($45,001 - $135,000)</option>
+          <option value="39">37% + 2% Medicare ($135,001 - $190,000)</option>
+          <option value="47">45% + 2% Medicare ($190,001+)</option>
         </select>
         <span className="text-xs mt-1 block text-[var(--color-text-secondary)] opacity-70">
-          Calculator assumes assets are held for 12 months, meaning capital is taxed at 50% of this rate.
+          Applied to dividends (net of franking credits) and to capital gains after the 50% CGT discount.
         </span>
       </label>
 

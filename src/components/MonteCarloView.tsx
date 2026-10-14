@@ -10,6 +10,8 @@ import {
   ResponsiveContainer,
   Area,
   ComposedChart,
+  LineChart,
+  ReferenceLine,
 } from 'recharts';
 import type { MonteCarloResults } from '../types';
 
@@ -84,14 +86,14 @@ export default function MonteCarloView({ results, timeHorizon }: MonteCarloViewP
               </thead>
               <tbody>
                 <tr className="border-b border-border/50">
-                  <td className="py-2 px-4 text-text-primary">10th (Pessimistic)</td>
+                  <td className="py-2 px-4 text-text-primary">10th (buy-favouring)</td>
                   <td className="text-right py-2 px-4 font-semibold text-text-primary">
                     {formatCurrency(results.percentiles.p10)}
                   </td>
                   <td className="py-2 px-4 text-text-secondary text-xs">
                     {results.percentiles.p10 > 0
-                      ? '90% chance rent is at least this much better'
-                      : '90% chance buy is at least this much better'}
+                      ? '90% chance renting is ahead by at least this much'
+                      : '10% chance buying is ahead by more than this'}
                   </td>
                 </tr>
                 <tr className="border-b border-border/50">
@@ -100,7 +102,7 @@ export default function MonteCarloView({ results, timeHorizon }: MonteCarloViewP
                     {formatCurrency(results.percentiles.p25)}
                   </td>
                   <td className="py-2 px-4 text-text-secondary text-xs">
-                    75% of scenarios
+                    75% of outcomes are above this
                   </td>
                 </tr>
                 <tr className="border-b border-border/50 bg-card/50">
@@ -118,18 +120,18 @@ export default function MonteCarloView({ results, timeHorizon }: MonteCarloViewP
                     {formatCurrency(results.percentiles.p75)}
                   </td>
                   <td className="py-2 px-4 text-text-secondary text-xs">
-                    25% of scenarios
+                    25% of outcomes are above this
                   </td>
                 </tr>
                 <tr className="border-b border-border/50">
-                  <td className="py-2 px-4 text-text-primary">90th (Optimistic)</td>
+                  <td className="py-2 px-4 text-text-primary">90th (rent-favouring)</td>
                   <td className="text-right py-2 px-4 font-semibold text-text-primary">
                     {formatCurrency(results.percentiles.p90)}
                   </td>
                   <td className="py-2 px-4 text-text-secondary text-xs">
                     {results.percentiles.p90 > 0
-                      ? '10% chance rent is even better than this'
-                      : '10% chance buy is even better than this'}
+                      ? '10% chance renting is ahead by more than this'
+                      : '90% chance buying is ahead by at least this much'}
                   </td>
                 </tr>
               </tbody>
@@ -149,7 +151,7 @@ export default function MonteCarloView({ results, timeHorizon }: MonteCarloViewP
                 dataKey="range"
                 stroke="#94a3b8"
                 label={{
-                  value: 'Advantage (Rent - Buy, in $k)',
+                  value: 'Advantage (Rent - Buy, in $k; end bins include tails)',
                   position: 'insideBottom',
                   offset: -5,
                   fill: '#94a3b8',
@@ -185,7 +187,7 @@ export default function MonteCarloView({ results, timeHorizon }: MonteCarloViewP
             Confidence Bands Over Time
           </h3>
           <p className="text-xs text-text-secondary mb-4">
-            Shaded areas show 10th-90th percentile range. Solid lines show median outcomes.
+            Shaded areas show the 10th-90th percentile range of net worth after exit costs. Solid lines show median outcomes.
           </p>
           <ResponsiveContainer width="100%" height={500}>
             <ComposedChart
@@ -220,44 +222,30 @@ export default function MonteCarloView({ results, timeHorizon }: MonteCarloViewP
                   borderRadius: '8px',
                   color: '#e2e8f0',
                 }}
-                formatter={(value: number) => formatCurrency(value)}
+                formatter={(value: number | number[]) =>
+                  Array.isArray(value)
+                    ? `${formatCurrency(value[0])} - ${formatCurrency(value[1])}`
+                    : formatCurrency(value)
+                }
               />
               <Legend wrapperStyle={{ color: '#e2e8f0', height: '80px', paddingTop: '40px' }} />
 
-              {/* Rent confidence band */}
+              {/* 10th-90th percentile bands */}
               <Area
                 type="monotone"
-                dataKey="rentP90"
+                dataKey={(d: MonteCarloResults['timeSeriesPercentiles'][number]) => [d.rentP10, d.rentP90]}
                 stroke="none"
                 fill="#fbbf24"
-                fillOpacity={0.1}
-                name="Rent 90th"
+                fillOpacity={0.15}
+                name="Rent 10th-90th"
               />
               <Area
                 type="monotone"
-                dataKey="rentP10"
-                stroke="none"
-                fill="#fbbf24"
-                fillOpacity={0.2}
-                name="Rent 10th"
-              />
-
-              {/* Buy confidence band */}
-              <Area
-                type="monotone"
-                dataKey="buyP90"
+                dataKey={(d: MonteCarloResults['timeSeriesPercentiles'][number]) => [d.buyP10, d.buyP90]}
                 stroke="none"
                 fill="#60a5fa"
-                fillOpacity={0.1}
-                name="Buy 90th"
-              />
-              <Area
-                type="monotone"
-                dataKey="buyP10"
-                stroke="none"
-                fill="#60a5fa"
-                fillOpacity={0.2}
-                name="Buy 10th"
+                fillOpacity={0.15}
+                name="Buy 10th-90th"
               />
 
               {/* Median lines */}
@@ -278,6 +266,52 @@ export default function MonteCarloView({ results, timeHorizon }: MonteCarloViewP
                 name="Buy (Median)"
               />
             </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Probability buying is ahead, by holding period */}
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold mb-3 text-text-primary">
+            Chance Buying Is Ahead, by Year You Sell
+          </h3>
+          <p className="text-xs text-text-secondary mb-4">
+            Share of simulations where the buyer's net worth after selling beats the renter's at each year.
+          </p>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart
+              data={results.timeSeriesPercentiles.filter((t) => t.year > 0)}
+              margin={{ top: 5, right: 30, left: 20, bottom: 15 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
+              <XAxis
+                dataKey="year"
+                stroke="#94a3b8"
+                label={{ value: 'Years', position: 'insideBottom', offset: -5, fill: '#94a3b8' }}
+              />
+              <YAxis
+                stroke="#94a3b8"
+                domain={[0, 1]}
+                tickFormatter={(value: number) => `${Math.round(value * 100)}%`}
+              />
+              <ReferenceLine y={0.5} stroke="#64748b" strokeDasharray="5 5" />
+              <Tooltip
+                contentStyle={{
+                  background: '#1a2942',
+                  border: '1px solid #1e3a5f',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                }}
+                formatter={(value: number) => formatPercent(value)}
+              />
+              <Line
+                type="monotone"
+                dataKey="buyBetterProbability"
+                stroke="#60a5fa"
+                strokeWidth={3}
+                dot={false}
+                name="P(buying ahead)"
+              />
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>

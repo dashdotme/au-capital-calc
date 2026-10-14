@@ -1,35 +1,70 @@
-import type { PropertyInputs, RentInputs, InvestmentInputs } from '../types';
-import { runComparison, isScenarioValue } from './calculations';
-import { generateCorrelatedSamples, percentile } from './distributions';
+import type { PropertyInputs, RentInputs, InvestmentInputs, MonteCarloResults } from '../types';
+import { runComparison, resolveScenarioValue, type RatePaths } from './calculations';
+import {
+  DEFAULT_CORRELATION_MATRIX,
+  DEFAULT_VARIABLE_MODELS,
+  INTEREST_RATE_REVERSION,
+  SIMULATED_VARIABLES,
+  cholesky,
+  clamp,
+  correlatedNormals,
+  createRng,
+  percentile,
+} from './distributions';
 
-export interface MonteCarloResults {
-  iterations: number;
-  rentBetterProbability: number;
-  buyBetterProbability: number;
-  expectedAdvantage: number; // Positive = rent better, negative = buy better
-  percentiles: {
-    p10: number;
-    p25: number;
-    p50: number; // Median
-    p75: number;
-    p90: number;
+export type { MonteCarloResults } from '../types';
+
+/** Convert a simple annual rate (%) to a continuously-compounded log rate and back. */
+const toLog = (ratePct: number) => Math.log(1 + ratePct / 100);
+const fromLog = (logRate: number) => (Math.exp(logRate) - 1) * 100;
+
+/**
+ * Generate one random economic path. Each variable gets a path-specific long-run average
+ * plus correlated year-to-year shocks, so the simulation captures both "which world are we
+ * in" uncertainty and sequence-of-returns risk.
+ */
+export function generateRatePaths(
+  baselines: Record<(typeof SIMULATED_VARIABLES)[number], number>,
+  years: number,
+  rng: () => number,
+  choleskyFactor: number[][] = cholesky(DEFAULT_CORRELATION_MATRIX)
+): Required<RatePaths> {
+  const m = DEFAULT_VARIABLE_MODELS;
+  const [zi, zr, zs, zp] = correlatedNormals(choleskyFactor, rng);
+  const longRun = {
+    interestRate: clamp(baselines.interestRate + zi * m.interestRate.longRunStdDev, m.interestRate.min, m.interestRate.max),
+    rentIncreaseRate: baselines.rentIncreaseRate + zr * m.rentIncreaseRate.longRunStdDev,
+    stockMarketReturn: baselines.stockMarketReturn + zs * m.stockMarketReturn.longRunStdDev,
+    propertyGrowthRate: baselines.propertyGrowthRate + zp * m.propertyGrowthRate.longRunStdDev,
   };
-  histogram: {
-    binStart: number;
-    binEnd: number;
-    count: number;
-    probability: number;
-  }[];
-  timeSeriesPercentiles: {
-    year: number;
-    rentP10: number;
-    rentP50: number;
-    rentP90: number;
-    buyP10: number;
-    buyP50: number;
-    buyP90: number;
-  }[];
-  allOutcomes: number[]; // Raw differences for advanced analysis
+
+  const paths: Required<RatePaths> = {
+    interestRate: [],
+    rentIncreaseRate: [],
+    stockMarketReturn: [],
+    propertyGrowthRate: [],
+  };
+
+  // Rates start at today's input and drift toward the path's long-run level.
+  let rate = baselines.interestRate;
+  for (let year = 0; year < years; year++) {
+    const [ei, er, es, ep] = correlatedNormals(choleskyFactor, rng);
+    rate += INTEREST_RATE_REVERSION * (longRun.interestRate - rate) + ei * m.interestRate.annualStdDev;
+    rate = clamp(rate, m.interestRate.min, m.interestRate.max);
+    paths.interestRate.push(rate);
+
+    paths.rentIncreaseRate.push(
+      clamp(longRun.rentIncreaseRate + er * m.rentIncreaseRate.annualStdDev, m.rentIncreaseRate.min, m.rentIncreaseRate.max)
+    );
+    paths.stockMarketReturn.push(
+      clamp(fromLog(toLog(longRun.stockMarketReturn) + (es * m.stockMarketReturn.annualStdDev) / 100), m.stockMarketReturn.min, m.stockMarketReturn.max)
+    );
+    paths.propertyGrowthRate.push(
+      clamp(fromLog(toLog(longRun.propertyGrowthRate) + (ep * m.propertyGrowthRate.annualStdDev) / 100), m.propertyGrowthRate.min, m.propertyGrowthRate.max)
+    );
+  }
+
+  return paths;
 }
 
 /**
@@ -40,90 +75,46 @@ export function runMonteCarloSimulation(
   rentInputs: RentInputs,
   investmentInputs: InvestmentInputs,
   years: number,
-  iterations: number = 5000
+  iterations: number = 5000,
+  seed: number = Date.now()
 ): MonteCarloResults {
+  const rng = createRng(seed);
+  const choleskyFactor = cholesky(DEFAULT_CORRELATION_MATRIX);
   const outcomes: number[] = [];
-  const timeSeriesData: {
-    rentValues: number[][];
-    buyValues: number[][];
-  } = {
-    rentValues: Array.from({ length: years + 1 }, () => []),
-    buyValues: Array.from({ length: years + 1 }, () => []),
+  const rentValues: number[][] = Array.from({ length: years + 1 }, () => []);
+  const buyValues: number[][] = Array.from({ length: years + 1 }, () => []);
+  const buyWins = new Array<number>(years + 1).fill(0);
+
+  const baselines = {
+    interestRate: resolveScenarioValue(propertyInputs.interestRate, 'baseline'),
+    rentIncreaseRate: resolveScenarioValue(rentInputs.rentIncreaseRate, 'baseline'),
+    stockMarketReturn: resolveScenarioValue(investmentInputs.stockMarketReturn, 'baseline'),
+    propertyGrowthRate: resolveScenarioValue(investmentInputs.propertyGrowthRate, 'baseline'),
   };
 
-  // Get baseline values
-  const baselineInterestRate = isScenarioValue(propertyInputs.interestRate)
-    ? propertyInputs.interestRate.baseline
-    : propertyInputs.interestRate;
-  const baselineRentIncrease = isScenarioValue(rentInputs.rentIncreaseRate)
-    ? rentInputs.rentIncreaseRate.baseline
-    : rentInputs.rentIncreaseRate;
-  const baselineStockReturn = isScenarioValue(investmentInputs.stockMarketReturn)
-    ? investmentInputs.stockMarketReturn.baseline
-    : investmentInputs.stockMarketReturn;
-  const baselinePropertyGrowth = isScenarioValue(investmentInputs.propertyGrowthRate)
-    ? investmentInputs.propertyGrowthRate.baseline
-    : investmentInputs.propertyGrowthRate;
-
-  // Run iterations
   for (let i = 0; i < iterations; i++) {
-    // Generate correlated samples for key variables
-    const samples = generateCorrelatedSamples({
-      interestRate: baselineInterestRate,
-      rentIncreaseRate: baselineRentIncrease,
-      stockMarketReturn: baselineStockReturn,
-      propertyGrowthRate: baselinePropertyGrowth,
-    });
+    const paths = generateRatePaths(baselines, years, rng, choleskyFactor);
+    const results = runComparison(propertyInputs, rentInputs, investmentInputs, years, paths);
 
-    // Create modified inputs with sampled values
-    const sampledPropertyInputs: PropertyInputs = {
-      ...propertyInputs,
-      interestRate: samples.interestRate,
-    };
+    for (const snapshot of results) {
+      rentValues[snapshot.year].push(snapshot.rentNetPositionAfterTax);
+      buyValues[snapshot.year].push(snapshot.mortgageNetPositionAfterSale);
+      if (snapshot.mortgageNetPositionAfterSale >= snapshot.rentNetPositionAfterTax) {
+        buyWins[snapshot.year]++;
+      }
+    }
 
-    const sampledRentInputs: RentInputs = {
-      ...rentInputs,
-      rentIncreaseRate: samples.rentIncreaseRate,
-    };
-
-    const sampledInvestmentInputs: InvestmentInputs = {
-      ...investmentInputs,
-      stockMarketReturn: samples.stockMarketReturn,
-      propertyGrowthRate: samples.propertyGrowthRate,
-    };
-
-    // Run comparison with sampled values
-    const results = runComparison(
-      sampledPropertyInputs,
-      sampledRentInputs,
-      sampledInvestmentInputs,
-      years
-    );
-
-    // Store time series data for percentile bands
-    results.forEach((snapshot) => {
-      timeSeriesData.rentValues[snapshot.year].push(snapshot.rentNetPositionAfterTax);
-      timeSeriesData.buyValues[snapshot.year].push(snapshot.mortgageNetPositionAfterSale);
-    });
-
-    // Store final outcome (positive = rent better)
+    // Positive = rent better
     const finalResult = results[results.length - 1];
-    const difference = finalResult.rentNetPositionAfterTax - finalResult.mortgageNetPositionAfterSale;
-    outcomes.push(difference);
+    outcomes.push(finalResult.rentNetPositionAfterTax - finalResult.mortgageNetPositionAfterSale);
   }
 
-  // Sort outcomes for percentile calculations
   const sortedOutcomes = [...outcomes].sort((a, b) => a - b);
 
-  // Calculate probabilities
-  const rentBetterCount = outcomes.filter((o) => o > 0).length;
-  const rentBetterProbability = rentBetterCount / iterations;
+  const rentBetterProbability = outcomes.filter((o) => o > 0).length / iterations;
   const buyBetterProbability = 1 - rentBetterProbability;
-
-  // Calculate expected value
   const expectedAdvantage = outcomes.reduce((sum, val) => sum + val, 0) / iterations;
 
-  // Calculate percentiles
   const percentiles = {
     p10: percentile(sortedOutcomes, 10),
     p25: percentile(sortedOutcomes, 25),
@@ -132,28 +123,25 @@ export function runMonteCarloSimulation(
     p90: percentile(sortedOutcomes, 90),
   };
 
-  // Create histogram (20 bins)
+  // Histogram over the 1st-99th percentile so a few extreme paths don't flatten it
   const numBins = 20;
-  const minOutcome = sortedOutcomes[0];
-  const maxOutcome = sortedOutcomes[sortedOutcomes.length - 1];
-  const binWidth = (maxOutcome - minOutcome) / numBins;
+  const histMin = percentile(sortedOutcomes, 1);
+  const histMax = percentile(sortedOutcomes, 99);
+  const binWidth = (histMax - histMin) / numBins || 1;
+  const counts = new Array<number>(numBins).fill(0);
+  for (const o of outcomes) {
+    counts[clamp(Math.floor((o - histMin) / binWidth), 0, numBins - 1)]++;
+  }
+  const histogram = counts.map((count, i) => ({
+    binStart: histMin + i * binWidth,
+    binEnd: histMin + (i + 1) * binWidth,
+    count,
+    probability: count / iterations,
+  }));
 
-  const histogram = Array.from({ length: numBins }, (_, i) => {
-    const binStart = minOutcome + i * binWidth;
-    const binEnd = binStart + binWidth;
-    const count = outcomes.filter((o) => o >= binStart && (i === numBins - 1 ? o <= binEnd : o < binEnd)).length;
-    return {
-      binStart,
-      binEnd,
-      count,
-      probability: count / iterations,
-    };
-  });
-
-  // Calculate time series percentiles
   const timeSeriesPercentiles = Array.from({ length: years + 1 }, (_, year) => {
-    const rentSorted = [...timeSeriesData.rentValues[year]].sort((a, b) => a - b);
-    const buySorted = [...timeSeriesData.buyValues[year]].sort((a, b) => a - b);
+    const rentSorted = rentValues[year].sort((a, b) => a - b);
+    const buySorted = buyValues[year].sort((a, b) => a - b);
 
     return {
       year,
@@ -163,6 +151,7 @@ export function runMonteCarloSimulation(
       buyP10: percentile(buySorted, 10),
       buyP50: percentile(buySorted, 50),
       buyP90: percentile(buySorted, 90),
+      buyBetterProbability: buyWins[year] / iterations,
     };
   });
 
@@ -175,5 +164,27 @@ export function runMonteCarloSimulation(
     histogram,
     timeSeriesPercentiles,
     allOutcomes: sortedOutcomes,
+  };
+}
+
+/** Express Monte Carlo dollar figures in today's dollars. */
+export function monteCarloToRealTerms(results: MonteCarloResults, inflationRate: number, years: number): MonteCarloResults {
+  const deflator = (year: number) => Math.pow(1 + inflationRate / 100, year);
+  const final = deflator(years);
+  const p = results.percentiles;
+  return {
+    ...results,
+    expectedAdvantage: results.expectedAdvantage / final,
+    percentiles: { p10: p.p10 / final, p25: p.p25 / final, p50: p.p50 / final, p75: p.p75 / final, p90: p.p90 / final },
+    histogram: results.histogram.map((b) => ({ ...b, binStart: b.binStart / final, binEnd: b.binEnd / final })),
+    timeSeriesPercentiles: results.timeSeriesPercentiles.map((t) => {
+      const d = deflator(t.year);
+      return {
+        ...t,
+        rentP10: t.rentP10 / d, rentP50: t.rentP50 / d, rentP90: t.rentP90 / d,
+        buyP10: t.buyP10 / d, buyP50: t.buyP50 / d, buyP90: t.buyP90 / d,
+      };
+    }),
+    allOutcomes: results.allOutcomes.map((o) => o / final),
   };
 }

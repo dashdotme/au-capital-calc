@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import type { PropertyInputs, RentInputs, InvestmentInputs } from '../types';
-import { runFocusComparison, type FocusResults } from '../utils/calculations';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import type { PropertyInputs, RentInputs, InvestmentInputs, YearlySnapshot } from '../types';
+import { getMetricValue, runFocusComparison } from '../utils/calculations';
 import { calculateFocusRange, getMetricLabel, getMetricUnit, formatCompactValue } from '../utils/focusRanges';
 import FocusSlider from './FocusSlider';
-import { isScenarioValue } from '../utils/calculations';
 
 interface FocusAnalysisProps {
   metricKey: string;
@@ -14,6 +13,8 @@ interface FocusAnalysisProps {
   timeHorizon: number;
 }
 
+const advantage = (s: YearlySnapshot) => s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale;
+
 export default function FocusAnalysis({
   metricKey,
   propertyInputs,
@@ -21,37 +22,7 @@ export default function FocusAnalysis({
   investmentInputs,
   timeHorizon,
 }: FocusAnalysisProps) {
-  // Get baseline value for the metric
-  const getBaselineValue = (): number => {
-    switch (metricKey) {
-      case 'interestRate':
-        return isScenarioValue(propertyInputs.interestRate)
-          ? propertyInputs.interestRate.baseline
-          : propertyInputs.interestRate;
-      case 'maintenanceRate':
-        return propertyInputs.maintenanceRate;
-      case 'monthlyRent':
-        return rentInputs.monthlyRent;
-      case 'rentIncreaseRate':
-        return isScenarioValue(rentInputs.rentIncreaseRate)
-          ? rentInputs.rentIncreaseRate.baseline
-          : rentInputs.rentIncreaseRate;
-      case 'stockMarketReturn':
-        return isScenarioValue(investmentInputs.stockMarketReturn)
-          ? investmentInputs.stockMarketReturn.baseline
-          : investmentInputs.stockMarketReturn;
-      case 'propertyGrowthRate':
-        return isScenarioValue(investmentInputs.propertyGrowthRate)
-          ? investmentInputs.propertyGrowthRate.baseline
-          : investmentInputs.propertyGrowthRate;
-      case 'dividendYield':
-        return investmentInputs.dividendYield ?? 0;
-      default:
-        return 0;
-    }
-  };
-
-  const baselineValue = getBaselineValue();
+  const baselineValue = getMetricValue(propertyInputs, rentInputs, investmentInputs, metricKey);
   const defaultRange = calculateFocusRange(metricKey, baselineValue);
 
   const [sliderValues, setSliderValues] = useState<number[]>([
@@ -62,8 +33,8 @@ export default function FocusAnalysis({
     defaultRange.extremeHigh,
   ]);
 
-  // Calculate results
-  const results: FocusResults = useMemo(() => {
+  // One simulation per slider value; each line is the rent-minus-buy advantage
+  const scenarios = useMemo(() => {
     return runFocusComparison(
       propertyInputs,
       rentInputs,
@@ -74,24 +45,11 @@ export default function FocusAnalysis({
     );
   }, [propertyInputs, rentInputs, investmentInputs, timeHorizon, metricKey, sliderValues]);
 
-  // Determine which strategy the metric affects
-  const isRentMetric = metricKey === 'monthlyRent' || metricKey === 'rentIncreaseRate' ||
-                       metricKey === 'stockMarketReturn' || metricKey === 'dividendYield';
-  const baselineKey = isRentMetric ? 'mortgageNetPositionAfterSale' : 'rentNetPositionAfterTax';
-  const scenarioKey = isRentMetric ? 'rentNetPositionAfterTax' : 'mortgageNetPositionAfterSale';
-  const baselineName = isRentMetric ? 'Buy (Baseline)' : 'Rent (Baseline)';
-
-  // Prepare chart data
-  const chartData = results.baseline.map((baselinePoint, index) => {
-    const dataPoint: Record<string, number> = {
-      year: baselinePoint.year,
-      baseline: baselinePoint[baselineKey],
-    };
-
-    results.scenarios.forEach((scenario, scenarioIndex) => {
-      dataPoint[`scenario${scenarioIndex}`] = scenario[index][scenarioKey];
+  const chartData = scenarios[0].map((point, index) => {
+    const dataPoint: Record<string, number> = { year: point.year };
+    scenarios.forEach((scenario, scenarioIndex) => {
+      dataPoint[`scenario${scenarioIndex}`] = advantage(scenario[index]);
     });
-
     return dataPoint;
   });
 
@@ -99,17 +57,23 @@ export default function FocusAnalysis({
   const unit = getMetricUnit(metricKey);
 
   // Calculate summary values
-  const year5Index = Math.min(5, results.baseline.length - 1);
-  const year30Index = results.baseline.length - 1;
+  const year5Index = Math.min(5, scenarios[0].length - 1);
+  const finalIndex = scenarios[0].length - 1;
 
   const formatCurrency = (value: number) =>
     `$${value.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`;
+  const formatAdvantage = (value: number) =>
+    `${value >= 0 ? 'Rent' : 'Buy'} +${formatCurrency(Math.abs(value))}`;
 
   return (
     <div className="mt-4 p-4 bg-card/50 rounded-lg border border-border animate-slideDown">
       <h3 className="text-lg font-semibold mb-4 text-accent">
         Focus Mode: {getMetricLabel(metricKey)}
       </h3>
+
+      <p className="text-xs text-text-secondary mb-4">
+        Lines show how far renting is ahead of buying (above zero) or behind (below zero), after exit costs and taxes.
+      </p>
 
       <FocusSlider
         values={sliderValues}
@@ -145,23 +109,14 @@ export default function FocusAnalysis({
                 borderRadius: '8px',
                 color: '#e2e8f0',
               }}
-              formatter={(value: number) => formatCurrency(value)}
+              formatter={(value: number) => formatAdvantage(value)}
             />
             <Legend wrapperStyle={{ color: '#e2e8f0', height: '80px', paddingTop: '40px' }} />
 
-            {/* Baseline */}
-            <Line
-              type="monotone"
-              dataKey="baseline"
-              stroke="#64748b"
-              name={baselineName}
-              strokeWidth={2}
-              dot={false}
-              strokeDasharray="5 5"
-            />
+            <ReferenceLine y={0} stroke="#64748b" strokeDasharray="5 5" />
 
             {/* 5 Scenario Lines */}
-            {results.scenarios.map((_, index) => (
+            {scenarios.map((_, index) => (
               <Line
                 key={index}
                 type="monotone"
@@ -187,9 +142,9 @@ export default function FocusAnalysis({
             </tr>
           </thead>
           <tbody>
-            {results.scenarios.map((scenario, index) => {
-              const value5 = scenario[year5Index][scenarioKey];
-              const value30 = scenario[year30Index][scenarioKey];
+            {scenarios.map((scenario, index) => {
+              const value5 = advantage(scenario[year5Index]);
+              const valueFinal = advantage(scenario[finalIndex]);
               return (
                 <tr key={index} className="border-b border-border/50">
                   <td className="py-2 px-4">
@@ -198,10 +153,10 @@ export default function FocusAnalysis({
                     </span>
                   </td>
                   <td className="text-right py-2 px-4 text-text-primary">
-                    {formatCurrency(value5)}
+                    {formatAdvantage(value5)}
                   </td>
                   <td className="text-right py-2 px-4 text-text-primary font-semibold">
-                    {formatCurrency(value30)}
+                    {formatAdvantage(valueFinal)}
                   </td>
                 </tr>
               );

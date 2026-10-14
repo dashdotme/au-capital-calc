@@ -18,6 +18,8 @@ export interface PropertyInputs {
   sellingCostRate: number;
   capitalGainsTaxRate: number;
   offsetAccountBalance?: number;
+  /** Lenders mortgage insurance, capitalised into the loan (typically only when LVR > 80%) */
+  lmi?: number;
 }
 
 export interface RentInputs {
@@ -29,8 +31,10 @@ export interface RentInputs {
 }
 
 export interface InvestmentInputs {
+  /** Total return including dividends; price growth is this minus dividendYield */
   stockMarketReturn: number | ScenarioValue;
   propertyGrowthRate: number | ScenarioValue;
+  /** Marginal rate including the Medicare levy */
   marginalTaxRate: number;
   inflationRate: number;
   stockTransactionCost: number;
@@ -39,25 +43,44 @@ export interface InvestmentInputs {
   dividendReinvestment?: boolean;
 }
 
+/**
+ * End-of-year state of both households. Both start with the same capital and spend the
+ * same amount each month; whichever strategy is cheaper that month invests the difference.
+ * "Net position" values are therefore directly comparable net worths.
+ */
 export interface YearlySnapshot {
   year: number;
+  /** Property value minus loan balance */
   mortgageEquity: number;
+  /** Upfront purchase costs plus principal and interest repaid */
   mortgageTotalPaid: number;
   mortgagePropertyValue: number;
+  mortgageLoanBalance: number;
+  /** Buyer's side portfolio, funded in months where owning is cheaper than renting */
+  mortgageInvestmentValue: number;
+  /** Buyer net worth before selling costs and taxes */
   mortgageNetPosition: number;
+  /** Buyer net worth after selling the property and liquidating investments */
   mortgageNetPositionAfterSale: number;
   mortgageMaintenance: number;
   mortgageRates: number;
   mortgageInsurance: number;
   mortgageTotalInterest: number;
+  /** Buyer cash outflow for housing during this year */
+  mortgageAnnualCost: number;
   rentTotalPaid: number;
   rentMovingCosts: number;
   rentInsurance: number;
   rentInvestmentValue: number;
+  /** Renter net worth before selling costs and taxes */
   rentNetPosition: number;
+  /** Renter net worth after liquidating investments and paying CGT */
   rentNetPositionAfterTax: number;
+  /** Cumulative after-tax dividends (including franking refunds) */
   rentDividends: number;
   rentFrankingCredits: number;
+  /** Renter cash outflow for housing during this year */
+  rentAnnualCost: number;
 }
 
 export interface ScenarioResults {
@@ -106,6 +129,7 @@ export interface MonteCarloResults {
     buyP10: number;
     buyP50: number;
     buyP90: number;
+    buyBetterProbability: number;
   }[];
   allOutcomes: number[];
 }
