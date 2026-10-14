@@ -46,7 +46,7 @@ export interface RatePaths {
  * the final sale; dividends are taxed at the marginal rate with franking credits
  * offsetting tax (and refunded if they exceed it).
  */
-class Portfolio {
+export class Portfolio {
   value = 0;
   costBase = 0;
   cash = 0;
@@ -99,6 +99,26 @@ class Portfolio {
 
   holdingValue(): number {
     return this.value + this.cash;
+  }
+
+  /**
+   * Sell enough to raise `needed` in cash after brokerage and discounted CGT (cash held
+   * first). Returns the amount actually raised, which is less if the portfolio runs out.
+   */
+  withdraw(needed: number): number {
+    if (needed <= 0) return 0;
+    const fromCash = Math.min(Math.max(0, this.cash), needed);
+    this.cash -= fromCash;
+    let remaining = needed - fromCash;
+    if (remaining <= 0 || this.value <= 0) return fromCash;
+    const costShare = this.costBase / this.value;
+    const gainPerDollar = Math.max(0, 1 - this.feeRate - costShare);
+    const netPerDollar = 1 - this.feeRate - gainPerDollar * CGT_DISCOUNT * this.taxRate;
+    const sold = Math.min(this.value, remaining / netPerDollar);
+    this.costBase -= costShare * sold;
+    this.value -= sold;
+    remaining -= sold * netPerDollar;
+    return needed - remaining;
   }
 
   /** Value if everything were sold today, after brokerage and discounted CGT. */

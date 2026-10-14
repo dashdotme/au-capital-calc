@@ -26,6 +26,7 @@ import FlipList from './components/FlipList';
 import SentenceView from './components/SentenceView';
 import LedgerTable from './components/LedgerTable';
 import GuidedFlow from './components/GuidedFlow';
+import SqueezeView from './components/SqueezeView';
 import { ThemeContext, type Theme } from './components/chartTheme';
 import FocusAnalysis from './components/FocusAnalysis';
 import RiskView from './components/RiskView';
@@ -36,11 +37,12 @@ import PortfolioComparison from './components/PortfolioComparison';
 import { PORTFOLIOS, applyPortfolio } from './portfolios';
 import { decodeState, encodeState, type SharedState } from './utils/shareState';
 
-type View = 'simple' | 'ledger' | 'risk';
+type View = 'simple' | 'ledger' | 'squeeze' | 'risk';
 type MainView = Exclude<View, 'risk'>;
 
 const VIEW_KEY = 'rent-or-buy.view';
 const THEME_KEY = 'rent-or-buy.theme';
+const SQUEEZE_SEEN_KEY = 'rent-or-buy.squeeze-seen';
 
 function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -130,6 +132,26 @@ function Segmented<T extends string | boolean>({
   );
 }
 
+/** A tongue-in-cheek handwritten note pointing at the AI Squeeze tab (desktop, until visited). */
+function SqueezeHint() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute top-full right-11 mt-1 hidden items-start md:flex">
+      <span className="mt-6 mr-1 w-[230px] -rotate-3 text-right font-[Caveat] text-[19px] leading-[1.05] font-semibold text-ink-2">
+        and here's what AI thinks AI might do to the markets
+      </span>
+      <svg width="58" height="54" viewBox="0 0 58 54" fill="none" className="text-ink-2">
+        <path
+          d="M4 46 C 24 54, 34 40, 22 32 C 12 25, 30 18, 40 22 C 48 25, 47 14, 44 5"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path d="M37 11 L44 4 L49 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  );
+}
+
 export default function RentVsMortgageCalculator() {
   // A shared link (#s=…) restores someone else's scenario; otherwise start from defaults
   const [initial] = useState(() => decodeState(window.location.hash, DEFAULT_STATE) ?? DEFAULT_STATE);
@@ -145,7 +167,7 @@ export default function RentVsMortgageCalculator() {
   const [changeFlash, setChangeFlash] = useState<ChangeFlash | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [focusMetric, setFocusMetric] = useState<string | null>(null);
-  const [mainView, setMainView] = useState<MainView>(() => readPref<MainView>(VIEW_KEY, ['simple', 'ledger'], 'simple'));
+  const [mainView, setMainView] = useState<MainView>(() => readPref<MainView>(VIEW_KEY, ['simple', 'ledger', 'squeeze'], 'simple'));
   const [showRisk, setShowRisk] = useState(false);
   const view: View = showRisk ? 'risk' : mainView;
   const [theme, setTheme] = useState<Theme>(() => readPref<Theme>(THEME_KEY, ['light', 'dark'], 'light'));
@@ -157,11 +179,18 @@ export default function RentVsMortgageCalculator() {
     writePref(THEME_KEY, theme);
   }, [theme]);
 
+  const [squeezeSeen, setSqueezeSeen] = useState(() => readPref(SQUEEZE_SEEN_KEY, ['yes', 'no'], 'no') === 'yes');
+
   const switchView = (next: MainView) => {
     setMainView(next);
     setShowRisk(false);
     writePref(VIEW_KEY, next);
+    if (next === 'squeeze' && !squeezeSeen) {
+      setSqueezeSeen(true);
+      writePref(SQUEEZE_SEEN_KEY, 'yes');
+    }
   };
+  const showSqueezeHint = !squeezeSeen && mainView !== 'squeeze' && !showRisk;
   const [monteCarloRun, setMonteCarloRun] = useState<{ results: MonteCarloResults; inputsKey: string } | null>(null);
   const [monteCarloRunning, setMonteCarloRunning] = useState(false);
 
@@ -424,7 +453,7 @@ export default function RentVsMortgageCalculator() {
   return (
     <ThemeContext.Provider value={theme}>
       <div className={`min-h-screen bg-ground text-ink print:hidden ${view === 'ledger' ? 'pb-24 lg:pb-0' : ''}`}>
-        <header className="border-b border-line">
+        <header className={`border-b border-line ${showSqueezeHint ? 'md:pb-14' : ''}`}>
           <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
             <div className="flex items-center gap-3">
               {view === 'risk' && (
@@ -454,12 +483,19 @@ export default function RentVsMortgageCalculator() {
                   {monteCarloRunning ? 'Running…' : 'Re-run'}
                 </button>
               ) : (
-                <Segmented
-                  label="View"
-                  value={mainView}
-                  onChange={switchView}
-                  options={[{ value: 'simple', label: 'Simple' }, { value: 'ledger', label: 'Ledger' }]}
-                />
+                <div className="relative">
+                  <Segmented
+                    label="View"
+                    value={mainView}
+                    onChange={switchView}
+                    options={[
+                      { value: 'simple', label: 'Simple' },
+                      { value: 'ledger', label: 'Ledger' },
+                      { value: 'squeeze', label: 'AI Squeeze' },
+                    ]}
+                  />
+                  {showSqueezeHint && <SqueezeHint />}
+                </div>
               )}
               <button
                 type="button"
@@ -518,6 +554,19 @@ export default function RentVsMortgageCalculator() {
             affordability={affordabilityCard}
             savedScenarios={savedCard}
             portfolioComparison={portfolioCard}
+          />
+        )}
+
+        {view === 'squeeze' && (
+          <SqueezeView
+            property={propertyInputs}
+            rent={rentInputs}
+            investment={investmentInputs}
+            horizon={timeHorizon}
+            sellYear={sellYear}
+            onSellYearChange={setSell}
+            income={income}
+            onIncomeChange={setIncome}
           />
         )}
 
