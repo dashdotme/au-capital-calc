@@ -179,9 +179,9 @@ function SqueezeEgg({ onOpen }: { onOpen: () => void }) {
           onClick={onOpen}
           className="-rotate-3 rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-right font-[Caveat] text-[21px] leading-[1.05] font-semibold text-ink-2 shadow-lg hover:text-ink"
         >
-          beep boop. want to see what AI
+          beep boop. want to see what robots
           <br />
-          thinks AI might do to the markets?
+          think robots might do to the markets?
         </button>
       </div>
       <button

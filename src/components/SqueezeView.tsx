@@ -188,15 +188,15 @@ export default function SqueezeView({
   return (
     <main className="mx-auto flex max-w-[1080px] flex-col gap-12 px-4 pt-8 pb-12 sm:px-6 sm:pt-12">
       <section aria-label="About this view" className="flex flex-col gap-3">
-        <span className="eyebrow">Wildly speculative, written by an AI</span>
+        <span className="eyebrow">Wildly speculative, written by a robot</span>
         <h1 className="m-0 text-4xl leading-none font-bold tracking-tighter sm:text-6xl">The AI squeeze</h1>
         <p className="m-0 max-w-2xl text-lg leading-relaxed text-ink-2">
-          What if AI slowly pushes unemployment up? This page is an AI guessing at what AI might do to the economy. The real
+          What if robots slowly push unemployment up? This page is an AI guessing at what AI might do to the economy. The real
           outcome is impossible to forecast, so read it as speculation, not a prediction. It runs your current scenario through rising unemployment and what tends to follow: slower pay
           rises, fewer people earning, forced sellers, falling share prices, rate cuts that prop prices back up, and
           profits drifting from pay packets to shareholders.
         </p>
-        <p className="m-0 text-sm font-medium text-ink-2">Every number here is an AI's guess.</p>
+        <p className="m-0 text-sm font-medium text-ink-2">Every number here is a robot's guess.</p>
       </section>
 
       <section aria-label="Squeeze settings" className="card grid grid-cols-1 gap-8 px-5 py-6 sm:px-7 md:grid-cols-2">
@@ -385,9 +385,9 @@ export default function SqueezeView({
         </summary>
         <div className="mt-3 flex flex-col gap-3 text-sm leading-relaxed text-ink-2">
           <p className="m-0 font-medium text-ink">
-            This is wildly speculative guessing by an AI. What AI will actually do to jobs, wages, interest rates and asset
+            This is wildly speculative guessing by a robot. What robots will actually do to jobs, wages, interest rates and asset
             prices is impossible to forecast: nothing like it has happened before, so there's no data to learn from and no
-            way to check the answer. Every number below is an AI's guess, picked to sound plausible and chained together.
+            way to check the answer. Every number below is a robot's guess, picked to sound plausible and chained together.
             Treat the results as speculation, never a forecast.
           </p>
           <p className="m-0">Here's how the guesses fit together.</p>

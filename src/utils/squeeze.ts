@@ -1,4 +1,4 @@
-// "AI squeeze" scenario: unemployment rises gradually as AI displaces work, and year-by-year
+// "AI squeeze" scenario: unemployment rises gradually as robots displace work, and year-by-year
 // paths for wages, mortgage rates, house prices, rents and investment returns follow from it.
 // Baselines come from the user's own inputs, so with no rise in unemployment the paths
 // reproduce the normal calculation.
