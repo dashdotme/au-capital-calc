@@ -15,6 +15,8 @@ const BASE_PROPERTY: PropertyInputs = {
   stampDuty: 40000,
   // Someone comparing renting with buying usually hasn't bought before
   firstHomeBuyer: true,
+  newHome: false,
+  firstHomeGrant: 0,
   otherPurchaseCosts: 7000,
   maintenanceRate: 1.0,
   councilRates: 3100,
@@ -24,6 +26,7 @@ const BASE_PROPERTY: PropertyInputs = {
   capitalGainsTaxRate: 0,
   offsetAccountBalance: 50000,
   lmi: 0,
+  lmiEstimated: true,
 };
 
 const BASE_RENT: RentInputs = {

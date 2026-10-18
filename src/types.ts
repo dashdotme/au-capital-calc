@@ -16,6 +16,10 @@ export interface PropertyInputs {
   /** State whose stamp duty rules apply; unset means the stamp duty figure is manual */
   state?: AuState;
   firstHomeBuyer?: boolean;
+  /** Never lived in; changes first home buyer stamp duty in some states and unlocks grants */
+  newHome?: boolean;
+  /** First home owner grant, derived from state, price and buyer; reduces the cash needed upfront */
+  firstHomeGrant?: number;
   otherPurchaseCosts: number;
   maintenanceRate: number;
   councilRates: number;
@@ -26,6 +30,8 @@ export interface PropertyInputs {
   offsetAccountBalance?: number;
   /** Lenders mortgage insurance, capitalised into the loan (typically only when LVR > 80%) */
   lmi?: number;
+  /** Estimate LMI from LVR and the 5% Deposit Scheme instead of using the figure entered */
+  lmiEstimated?: boolean;
   /** Id of the city preset these values came from, if any */
   location?: string;
 }

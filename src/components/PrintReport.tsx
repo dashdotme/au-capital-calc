@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import type { BreakEvenResult, MonteCarloResults, ScenarioResults, ScenarioValue, YearlySnapshot } from '../types';
 import { encodeState, type SharedState } from '../utils/shareState';
-import { calculateMortgagePayment, isScenarioValue, resolveScenarioValue } from '../utils/calculations';
+import { calculateMortgagePayment, isScenarioValue, resolveScenarioValue, upfrontCostsOf } from '../utils/calculations';
 import { explainGap } from '../utils/gap';
 import { flipDistance, formatMetricValue } from '../utils/flip';
 import { formatAdvantage, formatCompactCurrency, formatCurrency, formatPercent } from '../utils/format';
@@ -110,7 +110,8 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
     ['Interest rate', pct(p.interestRate)],
     ['Loan term', `${p.loanTerm} years`],
     ['Offset balance', formatCurrency(p.offsetAccountBalance ?? 0)],
-    ['Stamp duty', `${formatCurrency(p.stampDuty)} (${p.state ? `${p.state}, ${p.firstHomeBuyer ? 'first home buyer' : 'owned before'}` : 'entered manually'})`],
+    ['Stamp duty', `${formatCurrency(p.stampDuty)} (${p.state ? `${p.state}, ${p.firstHomeBuyer ? 'first home buyer' : 'owned before'}, ${p.newHome ? 'new' : 'established'} home` : 'entered manually'})`],
+    ['First home owner grant', formatCurrency(p.firstHomeGrant ?? 0)],
     ['Other purchase costs', formatCurrency(p.otherPurchaseCosts)],
     ['Maintenance', `${p.maintenanceRate}% of value / yr`],
     ['Council & water', `${formatCurrency(p.councilRates)} / yr`],
@@ -247,7 +248,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
         <Section title="Affordability">
           <Table
             rows={[
-              ['Cash needed upfront (deposit, stamp duty, costs)', formatCurrency(p.deposit + p.stampDuty + p.otherPurchaseCosts)],
+              ['Cash needed upfront (deposit, stamp duty, costs, less any grant)', formatCurrency(p.deposit + upfrontCostsOf(p))],
               [`Repayments at ${rate}%`, `${formatCurrency(repayment)}/month · ${formatPercent((repayment * 12) / state.income)} of income`],
               [`Repayments at the bank's test rate (${(rate + 3).toFixed(2)}%)`, `${formatCurrency(testRepayment)}/month · ${formatPercent((testRepayment * 12) / state.income)} of income`],
               ['Loan vs household income', `${(loan / state.income).toFixed(1)}× (APRA restricts 6× or more)`],

@@ -1,5 +1,6 @@
 import type { PropertyInputs, YearlySnapshot } from '../types';
 import { formatCompactCurrency, formatCurrency } from '../utils/format';
+import { upfrontCostsOf } from '../utils/calculations';
 
 interface LedgerTableProps {
   final: YearlySnapshot;
@@ -54,7 +55,7 @@ export default function LedgerTable({
   const offset = s.mortgageNetPosition - s.mortgageEquity - s.mortgageInvestmentValue;
   const homeAfterSale = s.mortgagePropertyValue - s.mortgageSaleCosts - s.mortgageLoanBalance;
   const buyerSharesAfterTax = s.mortgageNetPositionAfterSale - homeAfterSale - offset;
-  const purchaseCosts = (property.stampDuty + property.otherPurchaseCosts + (property.lmi ?? 0)) / deflator;
+  const purchaseCosts = (upfrontCostsOf(property) + (property.lmi ?? 0)) / deflator;
 
   const groups: { title: string; rows: Row[] }[] = [
     {
@@ -78,7 +79,7 @@ export default function LedgerTable({
         { label: 'Mortgage interest', buy: s.mortgageTotalInterest, rent: null, kind: 'cost' },
         { label: 'Maintenance, rates and insurance', buy: s.mortgageMaintenance + s.mortgageRates + s.mortgageInsurance, rent: null, kind: 'cost' },
         { label: 'Rent, moving and contents insurance', buy: null, rent: s.rentTotalPaid + s.rentMovingCosts + s.rentInsurance, kind: 'cost' },
-        { label: 'Stamp duty and purchase costs', buy: purchaseCosts, rent: null, kind: 'cost' },
+        { label: (property.firstHomeGrant ?? 0) > 0 ? 'Purchase costs, less the grant' : 'Stamp duty and purchase costs', buy: purchaseCosts, rent: null, kind: 'cost' },
       ],
     },
     {
@@ -166,8 +167,8 @@ export default function LedgerTable({
         </table>
       </div>
       <p className="m-0 max-w-3xl text-[13px] leading-relaxed text-muted">
-        Both start with {formatCurrency(property.deposit + property.stampDuty + property.otherPurchaseCosts + (property.offsetAccountBalance ?? 0))}
-        {' '}(deposit, stamp duty, costs and offset savings) and spend the same each month. Costs paid along the way are already
+        Both start with {formatCurrency(property.deposit + upfrontCostsOf(property) + (property.offsetAccountBalance ?? 0))}
+        {' '}(deposit, stamp duty, costs{(property.firstHomeGrant ?? 0) > 0 ? ' less the grant' : ''} and offset savings) and spend the same each month. Costs paid along the way are already
         reflected in the balances above them; "Edge" shows which side each line favours.
       </p>
     </section>

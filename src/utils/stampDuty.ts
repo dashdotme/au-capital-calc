@@ -1,18 +1,21 @@
-// Transfer (stamp) duty on an established home bought to live in, by state, with first
-// home buyer relief. Rates for contracts in 2026–27:
+// Transfer (stamp) duty on a home bought to live in, by state, with first home buyer
+// relief. Rates for contracts in 2026–27:
 // - NSW: Revenue NSW 2026/27 thresholds; First Home Buyers Assistance Scheme (exempt to
 //   $800k, concessional to $1m: duty rises linearly to the full amount at $1m).
 // - VIC: general rates with the principal place of residence concession; first home buyers
 //   exempt to $600k, sliding concession to $750k.
 // - QLD: home concession rates; first home concession exempts to $700k, tapering in $10k
-//   steps to nothing at $800k.
+//   steps to nothing at $800k. First home buyers pay nothing on a new home (from 1 May 2025).
 // - WA: general rates; first home owner rate (Perth and Peel, from 21 Mar 2025) exempts to
 //   $500k, then $13.63 per $100 over $500k up to $700k.
-// - SA: general rates; first home relief applies only to new homes, so none here.
+// - SA: general rates; first home buyers pay nothing on a new home (from 6 Jun 2024) and
+//   get no relief on an established one.
 // - TAS: general rates; the established-home exemption ended for settlements after 30 Jun 2026.
 // - ACT: owner-occupier rates; the Home Buyer Concession Scheme has no price or income cap
 //   from 1 Jul 2026, so eligible buyers pay nothing.
-// - NT: statutory formula; no duty concession for first home buyers of established homes.
+// - NT: statutory formula; no duty concession for first home buyers (its help is grants).
+// Elsewhere new and established homes are treated alike. Victoria's off-the-plan concession
+// for apartments and townhouses depends on construction progress and isn't modelled.
 // "Per $100 or part thereof" rounding is ignored, so figures can differ by a few dollars.
 
 export type AuState = 'NSW' | 'VIC' | 'QLD' | 'WA' | 'SA' | 'TAS' | 'ACT' | 'NT';
@@ -119,6 +122,8 @@ interface StateRules {
   name: string;
   standard: (value: number) => number;
   firstHome: (value: number) => number;
+  /** First home buyer duty on a new home, where it differs from an established one */
+  firstHomeNew?: (value: number) => number;
   /** What first home buyers get, in a short phrase */
   firstHomeNote: string;
 }
@@ -145,7 +150,8 @@ export const STAMP_DUTY_RULES: Record<AuState, StateRules> = {
       const concession = 17350 - 1735 * Math.floor((v - 700000) / 10000);
       return Math.max(0, scale(QLD, v) - concession);
     },
-    firstHomeNote: 'nothing up to $700k, reduced up to $800k (new homes are exempt at any price)',
+    firstHomeNew: () => 0,
+    firstHomeNote: 'nothing up to $700k, reduced up to $800k, and nothing on a new home at any price',
   },
   WA: {
     name: 'Western Australia',
@@ -157,7 +163,8 @@ export const STAMP_DUTY_RULES: Record<AuState, StateRules> = {
     name: 'South Australia',
     standard: (v) => scale(SA, v),
     firstHome: (v) => scale(SA, v),
-    firstHomeNote: 'no relief on established homes (new homes are exempt)',
+    firstHomeNew: () => 0,
+    firstHomeNote: 'no relief on an established home, nothing on a new home at any price',
   },
   TAS: {
     name: 'Tasmania',
@@ -179,19 +186,11 @@ export const STAMP_DUTY_RULES: Record<AuState, StateRules> = {
   },
 };
 
-export function calculateStampDuty(state: AuState, price: number, firstHomeBuyer: boolean): number {
+export function calculateStampDuty(state: AuState, price: number, firstHomeBuyer: boolean, newHome = false): number {
   const rules = STAMP_DUTY_RULES[state];
-  const duty = firstHomeBuyer ? rules.firstHome(price) : rules.standard(price);
+  const firstHome = (newHome && rules.firstHomeNew) || rules.firstHome;
+  const duty = firstHomeBuyer ? firstHome(price) : rules.standard(price);
   return Math.round(Math.max(0, duty));
-}
-
-/** Recalculate stamp duty from price and state; a property without a state keeps its manual figure. */
-export function withStampDuty<T extends { propertyPrice: number; stampDuty: number; state?: AuState; firstHomeBuyer?: boolean }>(
-  property: T
-): T {
-  if (!property.state) return property;
-  const stampDuty = calculateStampDuty(property.state, property.propertyPrice, property.firstHomeBuyer ?? false);
-  return stampDuty === property.stampDuty ? property : { ...property, stampDuty };
 }
 
 /** One line describing how the stamp duty figure was worked out. */

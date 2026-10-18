@@ -1,5 +1,6 @@
 import type { PropertyInputs, RentInputs } from './types';
-import { withStampDuty, type AuState } from './utils/stampDuty';
+import type { AuState } from './utils/stampDuty';
+import { withPurchaseCosts } from './utils/homeBuyerSupport';
 
 /**
  * Location presets: median dwelling (all dwellings) per Cotality's Home Value Index at
@@ -45,7 +46,7 @@ export function applyCity(property: PropertyInputs, rent: RentInputs, city: City
   const price = tidy(city.price, 5000);
   const state = city.state === 'avg' ? undefined : city.state;
   return [
-    withStampDuty({
+    withPurchaseCosts({
       ...property,
       location: city.id,
       propertyPrice: price,

@@ -1,4 +1,5 @@
 import type { PropertyInputs, YearlySnapshot } from '../types';
+import { upfrontCostsOf } from './calculations';
 
 export interface GapDriver {
   key: string;
@@ -16,7 +17,7 @@ export interface GapDriver {
  */
 export function explainGap(s: YearlySnapshot, property: PropertyInputs, deflator = 1): GapDriver[] {
   const price = property.propertyPrice / deflator;
-  const purchaseCosts = (property.stampDuty + property.otherPurchaseCosts + (property.lmi ?? 0)) / deflator;
+  const purchaseCosts = (upfrontCostsOf(property) + (property.lmi ?? 0)) / deflator;
   const offset = s.mortgageNetPosition - s.mortgageEquity - s.mortgageInvestmentValue;
   const homeAfterSale = s.mortgagePropertyValue - s.mortgageSaleCosts - s.mortgageLoanBalance;
   const buyerPortfolioAfterTax = s.mortgageNetPositionAfterSale - homeAfterSale - offset;
@@ -28,7 +29,7 @@ export function explainGap(s: YearlySnapshot, property: PropertyInputs, deflator
     { key: 'rent', label: 'Rent, moving and insurance avoided', amount: s.rentTotalPaid + s.rentMovingCosts + s.rentInsurance },
     { key: 'interest', label: 'Mortgage interest', amount: -s.mortgageTotalInterest },
     { key: 'running', label: 'Maintenance, rates and insurance', amount: -(s.mortgageMaintenance + s.mortgageRates + s.mortgageInsurance) },
-    { key: 'purchase', label: 'Stamp duty and purchase costs', amount: -purchaseCosts },
+    { key: 'purchase', label: (property.firstHomeGrant ?? 0) > 0 ? 'Purchase costs, less the grant' : 'Stamp duty and purchase costs', amount: -purchaseCosts },
     { key: 'sale', label: 'Selling costs', amount: -s.mortgageSaleCosts },
     { key: 'investing', label: "Renter's extra investment growth", amount: buyerGrowth - renterGrowth },
   ];

@@ -106,6 +106,13 @@ describe('runComparison', () => {
     expect(r.rentNetPositionAfterTax - r.mortgageNetPositionAfterSale).toBeCloseTo(40000, 0);
   });
 
+  it('counts a first home owner grant as cash back to the buyer', () => {
+    const r = last(
+      runComparison({ ...frictionless.property, stampDuty: 40000, firstHomeGrant: 30000 }, frictionless.rent, frictionless.investment, 10)
+    );
+    expect(r.rentNetPositionAfterTax - r.mortgageNetPositionAfterSale).toBeCloseTo(10000, 0);
+  });
+
   it('invests the buyer surplus when renting costs more', () => {
     const r = last(
       runComparison(frictionless.property, { ...frictionless.rent, monthlyRent: 5000 }, frictionless.investment, 30)
@@ -240,9 +247,10 @@ describe('gap explanation', async () => {
 
   it('drivers add up exactly to the buy-minus-rent gap', () => {
     for (const years of [1, 7, 30, 40]) {
-      const results = runComparison({ ...property, offsetAccountBalance: 50000, lmi: 8000 }, rent, investment, years);
+      const withGrant = { ...property, offsetAccountBalance: 50000, lmi: 8000, firstHomeGrant: 10000 };
+      const results = runComparison(withGrant, rent, investment, years);
       const s = last(results);
-      const total = explainGap(s, { ...property, offsetAccountBalance: 50000, lmi: 8000 }).reduce((sum, d) => sum + d.amount, 0);
+      const total = explainGap(s, withGrant).reduce((sum, d) => sum + d.amount, 0);
       expect(total).toBeCloseTo(s.mortgageNetPositionAfterSale - s.rentNetPositionAfterTax, 2);
     }
   });

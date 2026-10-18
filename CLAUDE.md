@@ -45,7 +45,8 @@ The application follows a unidirectional data flow:
 - **Franking credits**: grossed up at the 30% company rate; excess credits are refunded
 - **CGT discount**: 50% applied to property (cost base includes purchase and selling costs) and stocks
 - **Marginal tax rate**: stage 3 brackets including the 2% Medicare levy
-- **Stamp duty**: `utils/stampDuty.ts` holds 2026–27 owner-occupier schedules and first home buyer relief per state (established homes). When `PropertyInputs.state` is set, `withStampDuty()` recalculates it on every input update; no state means a manual figure
+- **Stamp duty**: `utils/stampDuty.ts` holds 2026–27 owner-occupier schedules and first home buyer relief per state, including new-home exemptions. When `PropertyInputs.state` is set it is recalculated on every input update; no state means a manual figure
+- **First home buyer support**: `utils/homeBuyerSupport.ts` holds first home owner grants (new homes), the 5% Deposit Scheme (waives LMI under the price cap) and a rough LMI estimate. `withPurchaseCosts()` derives stamp duty, `firstHomeGrant` and LMI (when `lmiEstimated`); the root applies it on every input update. The grant reduces upfront costs via `upfrontCostsOf()`
 
 ### Component Structure
 

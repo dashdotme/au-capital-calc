@@ -41,7 +41,7 @@ import PrintReport from './components/PrintReport';
 import PortfolioComparison from './components/PortfolioComparison';
 import { PORTFOLIOS, applyPortfolio } from './portfolios';
 import { decodeState, encodeState, type SharedState } from './utils/shareState';
-import { withStampDuty } from './utils/stampDuty';
+import { withPurchaseCosts } from './utils/homeBuyerSupport';
 
 type View = 'simple' | 'ledger' | 'squeeze' | 'risk';
 type MainView = Exclude<View, 'risk'>;
@@ -161,7 +161,7 @@ function SqueezeHint() {
 export default function RentVsMortgageCalculator() {
   // A shared link (#s=…) restores someone else's scenario; otherwise start from defaults
   const [initial] = useState(() => decodeState(window.location.hash, DEFAULT_STATE) ?? DEFAULT_STATE);
-  const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>(() => withStampDuty(initial.property));
+  const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>(() => withPurchaseCosts(initial.property));
   const [rentInputs, setRentInputs] = useState<RentInputs>(initial.rent);
   const [investmentInputs, setInvestmentInputs] = useState<InvestmentInputs>(initial.investment);
   const [timeHorizon, setTimeHorizon] = useState(initial.horizon);
@@ -313,8 +313,8 @@ export default function RentVsMortgageCalculator() {
 
   /** Apply an input edit and record how far it moved the result (edits within 2.5s add up). */
   const updateInputs = (next: { p?: PropertyInputs; r?: RentInputs; i?: InvestmentInputs; h?: number }) => {
-    // Stamp duty follows the price, state and buyer type unless it was entered by hand
-    if (next.p) next = { ...next, p: withStampDuty(next.p) };
+    // Stamp duty, grant and LMI follow price, deposit, state and buyer unless entered by hand
+    if (next.p) next = { ...next, p: withPurchaseCosts(next.p) };
     const p = next.p ?? propertyInputs;
     const r = next.r ?? rentInputs;
     const i = next.i ?? investmentInputs;

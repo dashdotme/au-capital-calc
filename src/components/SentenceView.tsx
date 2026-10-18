@@ -14,6 +14,7 @@ import type { BreakEvenResult, InvestmentInputs, PropertyInputs, RentInputs, Sce
 import type { GapDriver } from '../utils/gap';
 import { CITIES, applyCity } from '../cities';
 import { calculateStampDuty, stampDutyBasis } from '../utils/stampDuty';
+import { NEW_HOME_GROWTH_NOTE, depositNote, firstHomeGrant } from '../utils/homeBuyerSupport';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
 import { formatAdvantage, formatCompactCurrency, formatCurrency } from '../utils/format';
 import { PORTFOLIO_PHRASES, describeFlip, describeTiming, whyCards, winnerAt } from '../utils/narrative';
@@ -109,6 +110,13 @@ export default function SentenceView({
 
   const city = CITIES.find((c) => c.id === p.location);
   const dutyState = p.state;
+  /** Stamp duty and grant if this home were new or established: "$0 duty · $30k grant" */
+  const homeDetail = (newHome: boolean) => {
+    const option = { ...p, newHome };
+    const duty = dutyState ? calculateStampDuty(dutyState, p.propertyPrice, p.firstHomeBuyer ?? false, newHome) : p.stampDuty;
+    const grant = firstHomeGrant(option);
+    return `${formatCompactCurrency(duty)} duty${grant > 0 ? ` · ${formatCompactCurrency(grant)} grant` : ''}`;
+  };
   const final = baseline[sellYear];
   const winner = winnerAt(final);
   const gap = Math.abs(advantage(final));
@@ -135,10 +143,31 @@ export default function SentenceView({
               onChange={(propertyPrice) => setProperty({ propertyPrice })} />
             {city && <span className="text-xs text-muted">{city.name} median: {formatCurrency(city.price)}</span>}
             <span className="text-xs text-muted">Stamp duty {formatCurrency(p.stampDuty)}. {stampDutyBasis(p.state, p.firstHomeBuyer ?? false)}</span>
+            {(p.firstHomeGrant ?? 0) > 0 && <span className="text-xs text-muted">First home owner grant {formatCurrency(p.firstHomeGrant ?? 0)}.</span>}
           </span>
         )}
       </SentencePill>{' '}
-      home in{' '}
+      {dutyState ? (
+        <SentencePill label={p.newHome ? 'new home' : 'established home'} title="Home">
+          {(close) => (
+            <span className="flex flex-col gap-2">
+              <ChoiceList
+                value={p.newHome ? 'new' : 'established'}
+                options={[
+                  { value: 'established', label: 'Established home', detail: homeDetail(false) },
+                  { value: 'new', label: 'New home', detail: homeDetail(true) },
+                ]}
+                onPick={(choice) => {
+                  onPropertyAndRentChange({ ...p, newHome: choice === 'new' }, r);
+                  close();
+                }}
+              />
+              <span className="max-w-72 text-xs leading-snug text-muted">{NEW_HOME_GROWTH_NOTE}</span>
+            </span>
+          )}
+        </SentencePill>
+      ) : 'home'}{' '}
+      in{' '}
       <SentencePill label={city?.name ?? 'my area'} title="Location">
         {(close) => (
           <ChoiceList
@@ -159,8 +188,8 @@ export default function SentenceView({
               <ChoiceList
                 value={p.firstHomeBuyer ? 'first' : 'owned'}
                 options={[
-                  { value: 'first', label: 'First home buyer', detail: `${formatCompactCurrency(calculateStampDuty(dutyState, p.propertyPrice, true))} duty` },
-                  { value: 'owned', label: 'Owned before', detail: `${formatCompactCurrency(calculateStampDuty(dutyState, p.propertyPrice, false))} duty` },
+                  { value: 'first', label: 'First home buyer', detail: `${formatCompactCurrency(calculateStampDuty(dutyState, p.propertyPrice, true, p.newHome))} duty` },
+                  { value: 'owned', label: 'Owned before', detail: `${formatCompactCurrency(calculateStampDuty(dutyState, p.propertyPrice, false, p.newHome))} duty` },
                 ]}
                 onPick={(choice) => {
                   onPropertyAndRentChange({ ...p, firstHomeBuyer: choice === 'first' }, r);
@@ -179,7 +208,7 @@ export default function SentenceView({
               onChange={(deposit) => onPropertyAndRentChange({ ...p, deposit }, r)} />
             <span className="text-xs text-muted">
               {p.propertyPrice > 0 ? `${Math.round((p.deposit / p.propertyPrice) * 100)}% of the price` : ''}
-              {p.deposit < p.propertyPrice * 0.2 ? ' · under 20% usually means mortgage insurance' : ''}
+              {p.deposit < p.propertyPrice * 0.2 ? ` · ${depositNote(p)}` : ''}
             </span>
           </span>
         )}

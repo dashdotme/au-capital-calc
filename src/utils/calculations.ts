@@ -156,7 +156,7 @@ export function runComparison(
 
   // Both households start with the same capital: the buyer spends deposit + purchase
   // costs on the property and parks savings in the offset; the renter invests all of it.
-  const upfrontCosts = propertyInputs.stampDuty + propertyInputs.otherPurchaseCosts;
+  const upfrontCosts = upfrontCostsOf(propertyInputs);
   const startingCapital = propertyInputs.deposit + upfrontCosts + offset;
   const loanAmount = Math.max(0, propertyInputs.propertyPrice - propertyInputs.deposit + (propertyInputs.lmi ?? 0));
 
@@ -394,6 +394,11 @@ export type MetricKey =
   | 'dividendYield';
 
 /** Return copies of the inputs with a single metric overridden. */
+/** Cash spent on buying beyond the deposit: stamp duty and other costs, less any first home owner grant. */
+export function upfrontCostsOf(p: PropertyInputs): number {
+  return p.stampDuty + p.otherPurchaseCosts - (p.firstHomeGrant ?? 0);
+}
+
 export function withMetric(
   propertyInputs: PropertyInputs,
   rentInputs: RentInputs,

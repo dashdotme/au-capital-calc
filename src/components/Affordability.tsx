@@ -1,5 +1,5 @@
 import type { PropertyInputs } from '../types';
-import { calculateMortgagePayment, resolveScenarioValue } from '../utils/calculations';
+import { calculateMortgagePayment, resolveScenarioValue, upfrontCostsOf } from '../utils/calculations';
 import { formatCurrency, formatPercent } from '../utils/format';
 import { AdornedInput } from './InputField';
 
@@ -51,7 +51,7 @@ export default function Affordability({ property, income, onIncomeChange }: Affo
   const rate = resolveScenarioValue(property.interestRate, 'baseline');
   const repayment = calculateMortgagePayment(loan, rate, property.loanTerm);
   const testRepayment = calculateMortgagePayment(loan, rate + SERVICEABILITY_BUFFER, property.loanTerm);
-  const cashUpfront = property.deposit + property.stampDuty + property.otherPurchaseCosts;
+  const cashUpfront = property.deposit + upfrontCostsOf(property);
   const hasIncome = income !== null && income > 0;
 
   return (
@@ -61,7 +61,7 @@ export default function Affordability({ property, income, onIncomeChange }: Affo
           <h2 className="m-0 text-lg font-semibold">Can you afford to buy?</h2>
           <p className="m-0 text-[13px] text-ink-2">
             Cash needed upfront: <span className="font-mono text-ink">{formatCurrency(cashUpfront)}</span> (deposit,
-            stamp duty and costs). Repayments {formatCurrency(repayment)}/month.
+            stamp duty and costs{(property.firstHomeGrant ?? 0) > 0 ? ', less the grant' : ''}). Repayments {formatCurrency(repayment)}/month.
           </p>
         </div>
         <label className="flex w-full flex-col gap-1.5 sm:w-56">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateStampDuty, withStampDuty } from './stampDuty';
+import { calculateStampDuty } from './stampDuty';
 
 describe('standard owner-occupier stamp duty', () => {
   // The figures the city presets used to hard-code, worked from each state's schedule
@@ -65,10 +65,14 @@ describe('first home buyer stamp duty', () => {
   });
 });
 
-describe('withStampDuty', () => {
-  it('recalculates when a state is set and leaves a manual figure alone', () => {
-    const base = { propertyPrice: 950000, stampDuty: 1, firstHomeBuyer: true };
-    expect(withStampDuty({ ...base, state: 'NSW' as const }).stampDuty).toBe(29390);
-    expect(withStampDuty(base).stampDuty).toBe(1);
+describe('new homes', () => {
+  it('exempts first home buyers in QLD and SA at any price', () => {
+    expect(calculateStampDuty('QLD', 1500000, true, true)).toBe(0);
+    expect(calculateStampDuty('SA', 1500000, true, true)).toBe(0);
+  });
+
+  it('matches established-home rules elsewhere and for repeat buyers', () => {
+    expect(calculateStampDuty('NSW', 950000, true, true)).toBe(29390);
+    expect(calculateStampDuty('QLD', 750000, false, true)).toBe(calculateStampDuty('QLD', 750000, false));
   });
 });

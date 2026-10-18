@@ -67,6 +67,8 @@ export function decodeState(hash: string, defaults: SharedState): SharedState | 
         location: typeof raw.property?.location === 'string' ? raw.property.location : undefined,
         // No state (including links made before stamp duty was calculated) keeps the shared figure
         state: isAuState(raw.property?.state) ? raw.property.state : undefined,
+        // Older links carry a hand-entered LMI figure
+        lmiEstimated: raw.property?.lmiEstimated === true || undefined,
       },
       rent: mergeTyped(defaults.rent, raw.rent),
       investment: {

@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
 import { CITIES, applyCity } from '../cities';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
-import { calculateMortgagePayment, resolveScenarioValue, runComparison } from '../utils/calculations';
+import { calculateMortgagePayment, resolveScenarioValue, runComparison, upfrontCostsOf } from '../utils/calculations';
 import { formatCurrency } from '../utils/format';
-import { withStampDuty } from '../utils/stampDuty';
+import { depositNote, withPurchaseCosts } from '../utils/homeBuyerSupport';
 import { AdornedInput } from './InputField';
 
 interface GuidedFlowProps {
@@ -38,7 +38,7 @@ function Choice({ selected, onClick, children }: { selected: boolean; onClick: (
 export default function GuidedFlow({ property, rent, investment, horizon, onApply, onClose }: GuidedFlowProps) {
   const [step, setStep] = useState(0);
   const [p, setRawP] = useState(property);
-  const setP = (next: PropertyInputs) => setRawP(withStampDuty(next));
+  const setP = (next: PropertyInputs) => setRawP(withPurchaseCosts(next));
   const [r, setR] = useState(rent);
   const [inv, setInv] = useState(investment);
   const [stay, setStay] = useState(Math.min(horizon, 30));
@@ -117,7 +117,7 @@ export default function GuidedFlow({ property, rent, investment, horizon, onAppl
                   <AdornedInput ariaLabel="Deposit" format="currency" value={p.deposit} onChange={(deposit) => setP({ ...p, deposit })} />
                   <span className="text-xs text-muted">
                     {p.propertyPrice > 0 ? `${Math.round((p.deposit / p.propertyPrice) * 100)}% of the price` : ''}
-                    {p.deposit < p.propertyPrice * 0.2 ? ' · under 20% usually means mortgage insurance' : ' · no mortgage insurance'}
+                    {` · ${depositNote(p)}`}
                   </span>
                 </label>
               </>
@@ -179,8 +179,11 @@ export default function GuidedFlow({ property, rent, investment, horizon, onAppl
             <span className="eyebrow">What that means</span>
             <div className="flex flex-col gap-1">
               <span className="text-sm text-ink-2">Cash needed upfront</span>
-              <span className="font-mono text-2xl">{formatCurrency(p.deposit + p.stampDuty + p.otherPurchaseCosts)}</span>
-              <span className="text-xs text-muted">Deposit, {formatCurrency(p.stampDuty)} stamp duty and costs</span>
+              <span className="font-mono text-2xl">{formatCurrency(p.deposit + upfrontCostsOf(p))}</span>
+              <span className="text-xs text-muted">
+                Deposit, {formatCurrency(p.stampDuty)} stamp duty and costs
+                {(p.firstHomeGrant ?? 0) > 0 ? `, less a ${formatCurrency(p.firstHomeGrant ?? 0)} grant` : ''}
+              </span>
             </div>
             <div className="h-px bg-line" />
             <div className="flex flex-col gap-1">

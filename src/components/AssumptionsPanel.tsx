@@ -7,6 +7,7 @@ import InputField, { AdornedInput } from './InputField';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
 import { CITIES, applyCity } from '../cities';
 import { AU_STATES, isAuState, stampDutyBasis } from '../utils/stampDuty';
+import { NEW_HOME_GROWTH_NOTE, grantNote, guaranteeApplies, lmiNote } from '../utils/homeBuyerSupport';
 import MultiInput from './MultiInput';
 
 interface AssumptionsPanelProps {
@@ -146,28 +147,9 @@ export default function AssumptionsPanel({
             Fills median price (Sep 2026), 20% deposit, state, rent, rates and insurance.
           </span>
         </label>
-        <InputField label="Purchase price" format="currency" value={p.propertyPrice}
-          onChange={(propertyPrice) => onCityProperty({ propertyPrice })} />
-        <InputField label="Deposit" format="currency" value={p.deposit}
-          onChange={(deposit) => onPropertyChange({ ...p, deposit })} />
-        <div className="flex flex-col gap-1.5" aria-label={`Loan to value ratio ${lvr.toFixed(1)}%`}>
-          <div className="flex justify-between text-xs text-ink-2">
-            <span>LVR {lvr.toFixed(1)}%</span>
-            <span>{lvr > 80 ? 'Above 80%: lenders usually charge LMI' : 'No LMI at 80% or below'}</span>
-          </div>
-          <div className="relative h-1.5 rounded-full bg-line" aria-hidden>
-            <div className="absolute inset-y-0 left-0 rounded-full bg-ink-2" style={{ width: `${Math.min(100, Math.max(0, lvr))}%` }} />
-            <div className="absolute -inset-y-1 left-[80%] w-0.5 bg-ink" />
-          </div>
-        </div>
-        {(lvr > 80 || (p.lmi ?? 0) > 0) && (
-          <InputField label="Lenders mortgage insurance" format="currency" value={p.lmi ?? 0}
-            onChange={(lmi) => onPropertyChange({ ...p, lmi })}
-            helpText="Added to the loan. First home buyer schemes can waive it." />
-        )}
         <Pair>
           <label className="flex flex-col gap-1.5">
-            <span className="text-[13px] text-ink-2">Stamp duty rules</span>
+            <span className="text-[13px] text-ink-2">State rules</span>
             <select
               className="input-field"
               value={p.state ?? 'manual'}
@@ -177,7 +159,7 @@ export default function AssumptionsPanel({
               }}
             >
               {AU_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
-              <option value="manual">Enter manually</option>
+              <option value="manual">None (enter duty)</option>
             </select>
           </label>
           <label className="flex flex-col gap-1.5">
@@ -192,6 +174,49 @@ export default function AssumptionsPanel({
             </select>
           </label>
         </Pair>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[13px] text-ink-2">Home</span>
+          <select
+            className="input-field"
+            value={p.newHome ? 'new' : 'established'}
+            onChange={(e) => onPropertyChange({ ...p, newHome: e.target.value === 'new' })}
+          >
+            <option value="established">Established</option>
+            <option value="new">New (never lived in)</option>
+          </select>
+          {p.newHome && <span className="text-xs leading-snug text-muted">{NEW_HOME_GROWTH_NOTE}</span>}
+        </label>
+        <InputField label="Purchase price" format="currency" value={p.propertyPrice}
+          onChange={(propertyPrice) => onCityProperty({ propertyPrice })} />
+        <InputField label="Deposit" format="currency" value={p.deposit}
+          onChange={(deposit) => onPropertyChange({ ...p, deposit })} />
+        <div className="flex flex-col gap-1.5" aria-label={`Loan to value ratio ${lvr.toFixed(1)}%`}>
+          <div className="flex justify-between text-xs text-ink-2">
+            <span>LVR {lvr.toFixed(1)}%</span>
+            <span>{lvr <= 80 ? 'No LMI at 80% or below' : guaranteeApplies(p) ? 'LMI waived: 5% Deposit Scheme' : 'Above 80%: lenders charge LMI'}</span>
+          </div>
+          <div className="relative h-1.5 rounded-full bg-line" aria-hidden>
+            <div className="absolute inset-y-0 left-0 rounded-full bg-ink-2" style={{ width: `${Math.min(100, Math.max(0, lvr))}%` }} />
+            <div className="absolute -inset-y-1 left-[80%] w-0.5 bg-ink" />
+          </div>
+        </div>
+        {(lvr > 80 || (p.lmi ?? 0) > 0) && (
+          <InputField label="Lenders mortgage insurance" format="currency" value={p.lmi ?? 0}
+            onChange={(lmi) => onPropertyChange({ ...p, lmi, lmiEstimated: false })}
+            helpText={
+              <>
+                Added to the loan. {lmiNote(p)}
+                {!p.lmiEstimated && (
+                  <>
+                    {' '}
+                    <button type="button" className="underline hover:text-ink" onClick={() => onPropertyChange({ ...p, lmiEstimated: true })}>
+                      Use estimate
+                    </button>
+                  </>
+                )}
+              </>
+            } />
+        )}
         <Pair>
           <InputField label="Stamp duty" format="currency" value={p.stampDuty}
             onChange={(stampDuty) => onCityProperty({ stampDuty, state: undefined })}
@@ -201,6 +226,15 @@ export default function AssumptionsPanel({
           <InputField label="Other costs" format="currency" value={p.otherPurchaseCosts}
             onChange={(otherPurchaseCosts) => onPropertyChange({ ...p, otherPurchaseCosts })} />
         </Pair>
+        {p.state && p.firstHomeBuyer && (
+          <div className="flex flex-col gap-1">
+            <div className="flex justify-between text-[13px]">
+              <span className="text-ink-2">First home owner grant</span>
+              <span className="font-mono">{formatCurrency(p.firstHomeGrant ?? 0)}</span>
+            </div>
+            <span className="text-xs leading-snug text-muted">{grantNote(p)} Reduces the cash needed upfront.</span>
+          </div>
+        )}
       </Section>
 
       <Section title="The loan">

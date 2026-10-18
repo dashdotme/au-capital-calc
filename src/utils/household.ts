@@ -9,7 +9,7 @@
 // two years earlier, less a fire-sale discount. A renter who runs dry downsizes to a 20% cheaper rental, then
 // borrows at a personal-loan rate. Mechanics otherwise mirror runComparison.
 import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
-import { Portfolio, calculateMortgagePayment, type RatePaths } from '../utils/calculations';
+import { Portfolio, calculateMortgagePayment, upfrontCostsOf, type RatePaths } from '../utils/calculations';
 
 export interface Household {
   /** Gross household income in year 1 */
@@ -72,7 +72,7 @@ export function simulateHousehold(
   const fee = (investment.managementFee ?? 0) / 100;
   const totalMonths = Math.round(property.loanTerm * 12);
 
-  const upfront = property.stampDuty + property.otherPurchaseCosts;
+  const upfront = upfrontCostsOf(property);
   const startingCapital = property.deposit + upfront + (property.offsetAccountBalance ?? 0);
 
   // Buyer
