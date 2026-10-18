@@ -35,7 +35,8 @@ export const SIMULATED_VARIABLES = ['interestRate', 'rentIncreaseRate', 'stockMa
 export type SimulatedVariable = (typeof SIMULATED_VARIABLES)[number];
 
 /**
- * Correlations between the simulated variables, in SIMULATED_VARIABLES order.
+ * Correlations between the simulated variables, in SIMULATED_VARIABLES order. Signs follow the
+ * reasoning below; the sizes are judgment calls, not estimates from data.
  * - Higher rates → higher inflation → higher rents (+), lower asset valuations (−)
  * - Rents and property prices are both driven by housing demand (+)
  * - Stocks and property are both driven by economic growth (+)
@@ -81,6 +82,12 @@ export function correlatedNormals(choleskyFactor: number[][], rng: () => number)
  * - annualStdDev: year-to-year volatility around that average. For stocks and property this
  *   is the volatility of log returns, which keeps the median path at the input rate.
  * Interest rates mean-revert to their long-run level rather than being independent each year.
+ *
+ * Rough calibration to Australian history: shares ~15% a year (ASX 200 and global indices are
+ * 14–17%; portfolios override it with their own volatility); a single home's value ~7%, more
+ * than city indices (~4–5%) because one home carries its own idiosyncratic risk; rent growth
+ * ±1.5 points a year; mortgage rates ±0.6 points a year. The long-run spreads say how unsure the
+ * 30-year averages themselves are. Min/max clamps only stop absurd draws.
  */
 export interface VariableModel {
   longRunStdDev: number;
@@ -96,7 +103,7 @@ export const DEFAULT_VARIABLE_MODELS: Record<SimulatedVariable, VariableModel> =
   propertyGrowthRate: { longRunStdDev: 1.0, annualStdDev: 7, min: -30, max: 40 },
 };
 
-/** How quickly interest rates revert to their long-run level each year (0-1). */
+/** How quickly interest rates revert to their long-run level each year (0-1): a quarter of the gap, so shocks fade over a few years. */
 export const INTEREST_RATE_REVERSION = 0.25;
 
 /**

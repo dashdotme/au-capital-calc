@@ -23,6 +23,11 @@
 // - Investments: capital deflates too. While unemployment rises, earnings fall and share
 //   prices with them (`MARKET_DISTRESS`, scaled by the portfolio's share exposure); most of
 //   that comes back once it stops rising. Separately, profits shift from wages to companies.
+//
+// The coefficients below are judgment calls picked to give plausible magnitudes, loosely
+// anchored where noted (RBA rate cuts in past downturns, Australian Phillips curve estimates,
+// share falls in past recessions). None are fitted to data, and nothing like this has happened
+// before, so treat them as guesses.
 import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
 import { calculateMortgagePayment, resolveScenarioValue, type RatePaths } from './calculations';
 
@@ -50,12 +55,12 @@ export type SqueezePaths = Required<RatePaths> & {
 export const START_UNEMPLOYMENT = 4.5;
 export const HOLD_YEARS = 3;
 export const RECOVERY_YEARS = 5;
-/** Assumed gap between the RBA cash rate and owner-occupier variable rates */
+/** Assumed gap between the RBA cash rate and owner-occupier variable rates (about 2–2.3 points since 2023) */
 export const MORTGAGE_MARGIN = 2.15;
 const CASH_FLOOR = 0.1;
-/** Cash rate cut per point of slack */
+/** Cash rate cut per point of slack; the RBA cut 4.25 points (7.25% → 3%) in 2008–09 as unemployment rose about 2 points */
 const RATE_RESPONSE = 1.5;
-/** Nominal wage growth lost per point of slack */
+/** Nominal wage growth lost per point of slack; Australian estimates mostly fall between 0.3 and 1 */
 export const PHILLIPS = 0.6;
 /** Share of the gap the economy's "normal" unemployment closes each year */
 const HYSTERESIS = 0.1;
@@ -68,13 +73,13 @@ const DISTRESS_REBOUND = 0.5;
 /** Share of the accumulated borrowing-capacity change that reaches prices each year */
 const CAPACITY_PASS_THROUGH = 0.25;
 
-/** Share price fall per point unemployment rises in a year (earnings recession) */
+/** Share price fall per point unemployment rises in a year (earnings recession); e.g. a 2-point rise gives -16%, near past recession drawdowns spread over a year */
 export const MARKET_DISTRESS = 8;
 /** Share of the market fall that comes back once unemployment stops rising, and how fast */
 const MARKET_REBOUND = 0.6;
 const MARKET_REBOUND_SPEED = 0.5;
 
-/** How much of each portfolio moves with the share market */
+/** How much of each portfolio moves with the share market: roughly its share allocation */
 export const SHARE_EXPOSURE: Record<string, number> = {
   global: 1,
   us: 1,

@@ -45,7 +45,12 @@ export const CITIES: CityPreset[] = [
 /** Round to a tidy figure so the inputs read like something a person would type. */
 const tidy = (value: number, step: number) => Math.round(value / step) * step;
 
-/** Stamp duty for the combined-capitals preset, which has no single state's rules */
+/**
+ * Stamp duty for the combined-capitals preset, which has no single state's rules. Rough: a
+ * first home buyer's duty on a ~$975k home ranges from $0 (ACT, or a new home in QLD/SA) to
+ * about $54k (VIC); on an established home the larger states sit around $30–54k, so $40k is
+ * near the middle.
+ */
 const AVERAGE_STAMP_DUTY = 40000;
 
 export function applyCity(property: PropertyInputs, rent: RentInputs, city: CityPreset): [PropertyInputs, RentInputs] {

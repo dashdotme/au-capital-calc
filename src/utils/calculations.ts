@@ -1,6 +1,8 @@
 import type { PropertyInputs, RentInputs, InvestmentInputs, YearlySnapshot, ScenarioValue, ScenarioResults } from '../types';
 
+/** Franking credits are grossed up at the 30% company tax rate */
 const COMPANY_TAX_RATE = 0.3;
+/** Individuals pay CGT on half the gain for assets held over 12 months */
 const CGT_DISCOUNT = 0.5;
 
 export function isScenarioValue(value: number | ScenarioValue): value is ScenarioValue {

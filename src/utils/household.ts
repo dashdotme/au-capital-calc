@@ -49,9 +49,14 @@ export interface HouseholdResult {
   buyerMinBuffer: number;
 }
 
+// Judgment calls, not estimates from data:
+/** Price cut a forced seller accepts to sell quickly */
 const FIRE_SALE_DISCOUNT = 0.05;
+/** Months of missed payments before the buyer has to sell (lenders usually act after about 90 days) */
 const ARREARS_LIMIT = 3;
+/** Rate on borrowing to cover shortfalls, roughly an unsecured personal loan */
 const PERSONAL_LOAN_RATE = 0.1;
+/** A renter who runs short moves somewhere 20% cheaper */
 const DOWNSIZE = 0.8;
 
 export function simulateHousehold(

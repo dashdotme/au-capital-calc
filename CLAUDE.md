@@ -69,5 +69,6 @@ The application follows a unidirectional data flow:
 
 - The React Compiler is enabled in `vite.config.ts`, which automatically optimizes component memoization
 - All calculations use `useMemo` to recompute only when inputs change
+- Every hard-coded number gets a comment saying where it comes from (source and date) or, if it's a judgment call, saying so ("Rough:" / "judgment call"). City presets document their sources in the `cities.ts` header
 - Percentage rates in inputs are stored as numbers (e.g., 4.5 for 4.5%) and converted to decimals in calculations
 - The amortization schedule accounts for offset accounts by reducing the effective balance for interest calculations while maintaining the full balance for principal

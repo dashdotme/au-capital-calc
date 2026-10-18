@@ -30,8 +30,14 @@ const JOB_LOSS = [
   { months: 12, label: '1 year' },
   { months: 24, label: '2 years' },
 ];
+/** Rough share of gross income kept after income tax and Medicare for a two-earner household near $190k */
 const TAKE_HOME = 0.75;
+/** Random job-loss histories per setting; enough for the forced-sale chance to settle within a few points */
 const MONTE_CARLO_RUNS = 500;
+/** Rough: a two-income household able to borrow for a median-priced capital city home */
+const DEFAULT_GROSS_INCOME = 190000;
+/** Rough monthly non-housing spending for that household */
+const DEFAULT_LIVING_COSTS = 4500;
 
 const advantage = (s: { rentNetPositionAfterTax: number; mortgageNetPositionAfterSale: number }) =>
   s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale;
@@ -88,10 +94,10 @@ export default function SqueezeView({
   const [options, setOptions] = useState<SqueezeOptions>({
     peak: 7.5, start: 3, riseYears: 5, lasting: true, rateCuts: true, profitShift: true,
   });
-  const [livingCosts, setLivingCosts] = useState(4500);
+  const [livingCosts, setLivingCosts] = useState(DEFAULT_LIVING_COSTS);
   const [jobLossMonths, setJobLossMonths] = useState(0);
   const [randomSpells, setRandomSpells] = useState(true);
-  const grossIncome = income ?? 190000;
+  const grossIncome = income ?? DEFAULT_GROSS_INCOME;
   const set = (patch: Partial<SqueezeOptions>) => setOptions({ ...options, ...patch });
 
   const deferred = useDeferredValue({ options, livingCosts, jobLossMonths, randomSpells, grossIncome });
@@ -111,6 +117,9 @@ export default function SqueezeView({
     const { options: o, livingCosts: living, jobLossMonths: months, randomSpells: random, grossIncome: gross } = deferred;
     const paths = buildSqueezePaths(property, rent, investment, horizon, o);
     const hh = { grossIncome: gross, takeHome: TAKE_HOME, livingCosts: living };
+    // Chosen spell: one of two earners out (half the income), $15k retraining, and a lasting pay
+    // cut afterwards (7.5%, or 15% after two years out). Rough figures in the range of studies
+    // on job-loss "scarring", not fitted to Australian data.
     const spells: IncomeSpell[] = months > 0
       ? [{ startMonth: o.start * 12 + 1, months, incomeShare: 0.5, reskillCost: 15000, scarring: months >= 24 ? 0.15 : 0.075 }]
       : [];
@@ -124,6 +133,8 @@ export default function SqueezeView({
       for (let year = 2; year <= horizon; year++) {
         const u = paths.unemployment[year - 1];
         if (rng() < householdJobLossChance(u)) {
+          // Random spell: some partner income or benefits (50–60% of normal), $5–20k costs and
+          // up to 15% lasting pay cut; all rough
           spells.push({
             startMonth: (year - 1) * 12 + 1 + Math.floor(rng() * 12),
             months: 3 + Math.floor(rng() * (longestSpell(u) - 2)),

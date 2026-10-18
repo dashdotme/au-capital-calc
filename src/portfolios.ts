@@ -5,8 +5,10 @@ import type { InvestmentInputs, ScenarioValue } from './types';
  * blending 30-year history (Vanguard Index Chart 2026, to 30 Jun 2026) with Vanguard's
  * forward-looking capital market model (VCMM, 31 May 2026). Yields and franking from
  * Vanguard ETF factsheets (Aug 2026). Volatility is the annual standard deviation of
- * returns. Scenario triples follow the app's macro scenarios: "pessimistic" is high
- * rates and weak markets, so cash earns the most there.
+ * returns, rounded from each index's long-run history. Scenario triples follow the app's
+ * macro scenarios: "pessimistic" is high rates and weak markets, so cash earns the most
+ * there. The pessimistic and optimistic returns are judgment calls about 2 points either
+ * side of the baseline, wider for more volatile portfolios.
  */
 export interface PortfolioPreset {
   id: string;
