@@ -216,6 +216,11 @@ export function simulateHousehold(
           }
         }
       }
+      // Offset cash beyond the loan balance saves no interest, so the buyer invests it
+      if (owns && offset > balance) {
+        buyerShares.contribute(offset - balance);
+        offset = balance;
+      }
       // Track from year 2 so the opening balance doesn't mask later drawdowns
       if (owns && month > 12) buyerMinBuffer = Math.min(buyerMinBuffer, offset + buyerShares.liquidationValue() - buyerDebt);
 

@@ -172,6 +172,14 @@ describe('runComparison', () => {
     expect(withOffset[1].mortgageTotalInterest).toBeLessThan(without[1].mortgageTotalInterest);
   });
 
+  it('invests offset cash once it exceeds the loan', () => {
+    const results = runComparison({ ...property, offsetAccountBalance: 100000 }, rent, investment, 35);
+    const paidOff = results.find((s) => s.mortgageLoanBalance < 1)!;
+    const offsetHeld = (s: (typeof results)[number]) => s.mortgageNetPosition - s.mortgageEquity - s.mortgageInvestmentValue;
+    expect(offsetHeld(paidOff)).toBeCloseTo(0, 0);
+    expect(offsetHeld(results[1])).toBeCloseTo(100000, 0);
+  });
+
   it('deducts the management fee from returns', () => {
     const noFee = last(runComparison(property, rent, investment, 30));
     const withFee = last(runComparison(property, rent, { ...investment, managementFee: 0.5 }, 30));

@@ -166,13 +166,13 @@ export function runComparison(
   const reinvestDividends = investmentInputs.dividendReinvestment ?? true;
   const managementFee = (investmentInputs.managementFee ?? 0) / 100;
   const investedShare = Math.min(100, Math.max(0, investmentInputs.investedShare ?? 100)) / 100;
-  const offset = Math.max(0, propertyInputs.offsetAccountBalance ?? 0);
+  const startingOffset = Math.max(0, propertyInputs.offsetAccountBalance ?? 0);
   const totalMonths = Math.max(0, Math.round(propertyInputs.loanTerm * 12));
 
   // Both households start with the same capital: the buyer spends deposit + purchase
   // costs on the property and parks savings in the offset; the renter invests all of it.
   const upfrontCosts = upfrontCostsOf(propertyInputs);
-  const startingCapital = propertyInputs.deposit + upfrontCosts + offset;
+  const startingCapital = propertyInputs.deposit + upfrontCosts + startingOffset;
   const loanAmount = Math.max(0, propertyInputs.propertyPrice - propertyInputs.deposit + (propertyInputs.lmi ?? 0));
 
   const renter = new Portfolio(feeRate, marginalTaxRate);
@@ -180,6 +180,7 @@ export function runComparison(
   renter.contribute(startingCapital);
 
   let balance = loanAmount;
+  let offset = startingOffset;
   let currentInterestRate = Number.NaN;
   let monthlyPayment = 0;
   let monthsElapsed = 0;
@@ -304,6 +305,11 @@ export function runComparison(
         const saving = renterCost - ownerCost;
         buyer.contribute(saving * investedShare);
         buyerSpent += saving * (1 - investedShare);
+      }
+      // Offset cash beyond the loan balance saves no interest, so the buyer invests it
+      if (offset > balance) {
+        buyer.contribute(offset - balance);
+        offset = balance;
       }
 
       propertyValue *= 1 + monthlyPropertyGrowth;
