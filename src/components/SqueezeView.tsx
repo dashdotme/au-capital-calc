@@ -165,7 +165,7 @@ export default function SqueezeView({
   const winner = (gap: number) => (gap > 0 ? 'Renting' : 'Buying');
 
   return (
-    <main className="mx-auto flex max-w-[1080px] flex-col gap-12 px-4 pt-8 pb-20 sm:px-6 sm:pt-12">
+    <main className="mx-auto flex max-w-[1080px] flex-col gap-12 px-4 pt-8 pb-12 sm:px-6 sm:pt-12">
       <section aria-label="About this view" className="flex flex-col gap-3">
         <span className="eyebrow">Speculative fiction, with spreadsheets</span>
         <h1 className="m-0 text-4xl leading-none font-bold tracking-tighter sm:text-6xl">The AI squeeze</h1>

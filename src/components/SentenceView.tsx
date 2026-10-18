@@ -294,7 +294,7 @@ export default function SentenceView({
   ];
 
   return (
-    <main className="mx-auto flex max-w-[1080px] flex-col gap-14 px-4 pt-6 pb-20 sm:px-6 sm:pt-10">
+    <main className="mx-auto flex max-w-[1080px] flex-col gap-14 px-4 pt-6 pb-12 sm:px-6 sm:pt-10">
       <section aria-label="Your situation" className="flex flex-col gap-4">
         {pillsAnswer}
         <p className="m-0 text-sm text-muted">

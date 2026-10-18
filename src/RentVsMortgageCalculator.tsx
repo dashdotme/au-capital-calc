@@ -47,8 +47,9 @@ type View = 'simple' | 'ledger' | 'squeeze' | 'risk';
 type MainView = Exclude<View, 'risk'>;
 
 const VIEW_KEY = 'rent-or-buy.view';
+/** Set once someone finds the AI Squeeze through the corner easter egg */
+const SQUEEZE_UNLOCKED_KEY = 'rent-or-buy.squeeze-unlocked';
 const THEME_KEY = 'rent-or-buy.theme';
-const SQUEEZE_SEEN_KEY = 'rent-or-buy.squeeze-seen';
 
 function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
@@ -138,22 +139,36 @@ function Segmented<T extends string | boolean>({
   );
 }
 
-/** A tongue-in-cheek handwritten note pointing at the AI Squeeze tab (desktop, until visited). */
-function SqueezeHint() {
+/**
+ * Easter egg: hovering the very bottom-right corner (desktop) slides out a handwritten note
+ * that opens the AI Squeeze view.
+ */
+function SqueezeEgg({ onOpen }: { onOpen: () => void }) {
+  const [open, setOpen] = useState(false);
   return (
-    <div aria-hidden className="pointer-events-none absolute top-full right-11 mt-1 hidden items-start md:flex">
-      <span className="mt-6 mr-1 w-[230px] -rotate-3 text-right font-[Caveat] text-[19px] leading-[1.05] font-semibold text-ink-2">
-        and here's what AI thinks AI might do to the markets
-      </span>
-      <svg width="58" height="54" viewBox="0 0 58 54" fill="none" className="text-ink-2">
-        <path
-          d="M4 46 C 24 54, 34 40, 22 32 C 12 25, 30 18, 40 22 C 48 25, 47 14, 44 5"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-        <path d="M37 11 L44 4 L49 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+    <div
+      className="pointer-events-none fixed right-0 bottom-0 z-20 hidden lg:block"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      {/* The invisible hotspot that catches the mouse */}
+      <div aria-hidden className="pointer-events-auto absolute right-0 bottom-0 h-10 w-10" />
+      <div
+        className={`relative flex origin-bottom-right p-3 transition-all duration-300 ${
+          open ? 'pointer-events-auto scale-100 opacity-100' : 'translate-x-6 translate-y-6 scale-90 opacity-0'
+        }`}
+      >
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={onOpen}
+          className="-rotate-3 rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-right font-[Caveat] text-[21px] leading-[1.05] font-semibold text-ink-2 shadow-lg hover:text-ink"
+        >
+          psst. want to see what AI
+          <br />
+          thinks AI might do to the markets?
+        </button>
+      </div>
     </div>
   );
 }
@@ -185,18 +200,19 @@ export default function RentVsMortgageCalculator() {
     writePref(THEME_KEY, theme);
   }, [theme]);
 
-  const [squeezeSeen, setSqueezeSeen] = useState(() => readPref(SQUEEZE_SEEN_KEY, ['yes', 'no'], 'no') === 'yes');
+  const [squeezeUnlocked, setSqueezeUnlocked] = useState(
+    () => mainView === 'squeeze' || readPref(SQUEEZE_UNLOCKED_KEY, ['yes', 'no'], 'no') === 'yes'
+  );
 
   const switchView = (next: MainView) => {
     setMainView(next);
     setShowRisk(false);
     writePref(VIEW_KEY, next);
-    if (next === 'squeeze' && !squeezeSeen) {
-      setSqueezeSeen(true);
-      writePref(SQUEEZE_SEEN_KEY, 'yes');
+    if (next === 'squeeze' && !squeezeUnlocked) {
+      setSqueezeUnlocked(true);
+      writePref(SQUEEZE_UNLOCKED_KEY, 'yes');
     }
   };
-  const showSqueezeHint = !squeezeSeen && mainView !== 'squeeze' && !showRisk;
   const [monteCarloRun, setMonteCarloRun] = useState<{ results: MonteCarloResults; inputsKey: string } | null>(null);
   const [monteCarloRunning, setMonteCarloRunning] = useState(false);
 
@@ -483,7 +499,7 @@ export default function RentVsMortgageCalculator() {
   return (
     <ThemeContext.Provider value={theme}>
       <div className={`min-h-screen bg-ground text-ink print:hidden ${view === 'ledger' ? 'pb-24 lg:pb-0' : ''}`}>
-        <header className={`border-b border-line ${showSqueezeHint ? 'md:pb-14' : ''}`}>
+        <header className="border-b border-line">
           <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
             <div className="flex items-center gap-3">
               {view === 'risk' && (
@@ -513,19 +529,17 @@ export default function RentVsMortgageCalculator() {
                   {monteCarloRunning ? 'Running…' : 'Re-run'}
                 </button>
               ) : (
-                <div className="relative">
-                  <Segmented
-                    label="View"
-                    value={mainView}
-                    onChange={switchView}
-                    options={[
-                      { value: 'simple', label: 'Simple' },
-                      { value: 'ledger', label: 'Ledger' },
-                      { value: 'squeeze', label: 'AI Squeeze' },
-                    ]}
-                  />
-                  {showSqueezeHint && <SqueezeHint />}
-                </div>
+                <Segmented
+                  label="View"
+                  value={mainView}
+                  onChange={switchView}
+                  options={[
+                    { value: 'simple', label: 'Simple' },
+                    { value: 'ledger', label: 'Ledger' },
+                    // Hidden until found through the corner easter egg, then kept
+                    ...(squeezeUnlocked ? [{ value: 'squeeze' as const, label: 'AI Squeeze' }] : []),
+                  ]}
+                />
               )}
               <button
                 type="button"
@@ -602,7 +616,7 @@ export default function RentVsMortgageCalculator() {
         )}
 
         {view === 'ledger' && (
-          <div className="mx-auto grid max-w-[1360px] grid-cols-1 items-start gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(340px,390px)_minmax(0,1fr)]">
+          <div className="mx-auto grid max-w-[1360px] grid-cols-1 items-start gap-6 px-4 pt-6 pb-10 sm:px-6 lg:grid-cols-[minmax(340px,390px)_minmax(0,1fr)]">
             <div className="order-2 lg:sticky lg:top-6 lg:order-1 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:rounded-xl">
               {assumptionsPanel}
             </div>
@@ -664,6 +678,7 @@ export default function RentVsMortgageCalculator() {
         )}
 
         <SiteFooter />
+        {!squeezeUnlocked && !showRisk && <SqueezeEgg onOpen={() => { switchView('squeeze'); window.scrollTo(0, 0); }} />}
 
         {view === 'ledger' && (
           <div className="fixed inset-x-0 bottom-0 z-10 flex gap-2.5 border-t border-line bg-ground/95 px-4 pt-3 pb-5 backdrop-blur lg:hidden">
