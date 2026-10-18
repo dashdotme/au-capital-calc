@@ -129,7 +129,14 @@ export default function LedgerTable({
       </div>
 
       <div className="card relative overflow-x-auto">
-        <table className="w-full min-w-[600px] border-collapse text-[15px] [&_td]:whitespace-nowrap [&_thead_th]:whitespace-nowrap">
+        {/* Fixed columns, so they don't resize as the figures change length while you drag the slider */}
+        <table className="w-full min-w-[600px] table-fixed border-collapse text-[15px] [&_td]:whitespace-nowrap [&_thead_th]:whitespace-nowrap">
+          <colgroup>
+            <col />
+            <col className="w-[9.5rem]" />
+            <col className="w-[9.5rem]" />
+            <col className="w-[9rem]" />
+          </colgroup>
           <thead>
             <tr>
               <th scope="col" className="eyebrow px-4 py-4 text-left">Line item</th>

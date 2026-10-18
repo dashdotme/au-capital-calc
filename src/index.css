@@ -1,8 +1,29 @@
 @import "tailwindcss";
 
+/*
+ * Fallbacks sized to match the web fonts, so text doesn't reflow (and push the page around)
+ * when Google Fonts arrives. Measured against Instrument Sans and IBM Plex Mono in Chrome.
+ */
+@font-face {
+  font-family: 'Instrument Sans Fallback';
+  src: local('Arial'), local('Helvetica'), local('Liberation Sans');
+  size-adjust: 101.3%;
+  ascent-override: 95.8%;
+  descent-override: 24.7%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'IBM Plex Mono Fallback';
+  src: local('Courier New'), local('Courier'), local('Liberation Mono');
+  size-adjust: 100%;
+  ascent-override: 103%;
+  descent-override: 28%;
+  line-gap-override: 0%;
+}
+
 @theme {
-  --font-sans: 'Instrument Sans', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-sans: 'Instrument Sans', 'Instrument Sans Fallback', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, monospace;
 
   /* Light is the default theme; dark overrides these below */
   --color-ground: #f7f6f3;
@@ -34,6 +55,8 @@
 @layer base {
   html {
     color-scheme: light;
+    /* Reserve the scrollbar's space so switching between short and long views doesn't nudge the page sideways */
+    scrollbar-gutter: stable;
   }
 
   body {

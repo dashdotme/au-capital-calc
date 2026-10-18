@@ -501,7 +501,7 @@ export default function RentVsMortgageCalculator() {
       <div className={`min-h-screen bg-ground text-ink print:hidden ${view === 'ledger' ? 'pb-24 lg:pb-0' : ''}`}>
         <header className="border-b border-line">
           <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
-            <div className="flex items-center gap-3">
+            <div className="flex min-h-11 items-center gap-3">
               {view === 'risk' && (
                 <button
                   type="button"
@@ -518,13 +518,14 @@ export default function RentVsMortgageCalculator() {
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Same height whichever controls show, so the Risk view doesn't nudge the header */}
+            <div className="flex min-h-11 flex-wrap items-center gap-2">
               {view === 'risk' ? (
                 <button
                   type="button"
                   onClick={runMonteCarlo}
                   disabled={monteCarloRunning}
-                  className="min-h-10 rounded-lg border border-line-strong bg-surface px-3.5 text-[13px] font-semibold disabled:opacity-50"
+                  className="min-h-10 min-w-[5.5rem] rounded-lg border border-line-strong bg-surface px-3.5 text-[13px] font-semibold disabled:opacity-50"
                 >
                   {monteCarloRunning ? 'Running…' : 'Re-run'}
                 </button>
@@ -550,7 +551,8 @@ export default function RentVsMortgageCalculator() {
                 {themeIcon}
               </button>
               <button type="button" onClick={copyLink} aria-label={linkCopied ? 'Link copied' : 'Copy link to this scenario'}
-                className={`${iconButton} sm:w-auto sm:gap-2 sm:px-3 sm:text-[13px]`}>
+                className={`${iconButton} sm:w-auto sm:min-w-[7.25rem] sm:gap-2 sm:px-3 sm:text-[13px]`}>
+                {/* Wide enough for "Copy link", so switching to "Copied" doesn't shift the header */}
                 {linkIcon}
                 <span className="hidden sm:inline" aria-live="polite">{linkCopied ? 'Copied' : 'Copy link'}</span>
               </button>
@@ -564,7 +566,7 @@ export default function RentVsMortgageCalculator() {
         </header>
 
         {view === 'risk' && (
-          <main className="mx-auto max-w-[1240px] px-4 py-10 sm:px-6">
+          <main className="mx-auto min-h-screen max-w-[1240px] px-4 py-10 sm:px-6">
             <RiskView
               results={monteCarloResults}
               running={monteCarloRunning}
