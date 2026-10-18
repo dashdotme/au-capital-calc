@@ -9,6 +9,7 @@ import { CITIES, applyCity } from '../cities';
 import { AU_STATES, isAuState, stampDutyBasis } from '../utils/stampDuty';
 import { NEW_HOME_GROWTH_NOTE, NEW_HOME_GROWTH_SHORT, grantNote, guaranteeApplies, lmiNote } from '../utils/homeBuyerSupport';
 import MultiInput from './MultiInput';
+import NewHomeGrowthSources from './NewHomeGrowthSources';
 
 interface AssumptionsPanelProps {
   propertyInputs: PropertyInputs;
@@ -184,7 +185,7 @@ export default function AssumptionsPanel({
             <option value="established">Established</option>
             <option value="new">New (never lived in)</option>
           </select>
-          {p.newHome && <span className="text-xs leading-snug text-muted">{NEW_HOME_GROWTH_NOTE}</span>}
+          {p.newHome && <span className="text-xs leading-snug text-muted">{NEW_HOME_GROWTH_NOTE} <NewHomeGrowthSources /></span>}
         </label>
         <InputField label="Purchase price" format="currency" value={p.propertyPrice}
           onChange={(propertyPrice) => onCityProperty({ propertyPrice })} />
@@ -284,7 +285,7 @@ export default function AssumptionsPanel({
           'Including dividends, before fees.')}
         {scenarioField('Property growth / year', inv.propertyGrowthRate,
           (propertyGrowthRate) => onInvestmentChange({ ...inv, propertyGrowthRate }), 'propertyGrowthRate', 'percent',
-          p.newHome ? `${NEW_HOME_GROWTH_SHORT} ${growthNote ?? ''}`.trim() : growthNote)}
+          p.newHome ? <>{NEW_HOME_GROWTH_SHORT} <NewHomeGrowthSources />{growthNote && <> {growthNote}</>}</> : growthNote)}
         <label className="flex flex-col gap-1.5">
           <span className="text-[13px] text-ink-2">Income tax rate (incl. 2% Medicare)</span>
           <select
