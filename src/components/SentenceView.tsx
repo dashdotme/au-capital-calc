@@ -20,12 +20,11 @@ import NewHomeGrowthSources from './NewHomeGrowthSources';
 import HomeGrowthSources from './HomeGrowthSources';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
 import { formatAdvantage, formatCompactCurrency, formatCurrency } from '../utils/format';
-import { INVESTED_SHARE_NOTE, PORTFOLIO_PHRASES, describeFlip, describeTiming, investedPhrase, whyCards, winnerAt } from '../utils/narrative';
+import { INVESTED_SHARES, INVESTED_SHARE_NOTE, PORTFOLIO_PHRASES, describeFlip, describeTiming, investedPhrase, whyCards, winnerAt } from '../utils/narrative';
 import { AdornedInput } from './InputField';
 import SentencePill from './SentencePill';
 import GapExplainer from './GapExplainer';
 import { niceTicks, useChart, yearTicks } from './chartTheme';
-import { DISCLAIMER_SHORT } from '../site';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface SentenceViewProps {
@@ -50,6 +49,8 @@ interface SentenceViewProps {
   affordability: ReactNode;
   savedScenarios: ReactNode;
   portfolioComparison: ReactNode;
+  /** Rent-minus-buy advantage at the sell year for each INVESTED_SHARES option, in the displayed basis */
+  investedOutcomes: { share: number; advantage: number }[];
   /** Price-to-income warning, shown under the answer when growth looks stretched */
   realityCheck?: ReactNode;
 }
@@ -57,14 +58,6 @@ interface SentenceViewProps {
 type Panel = 'afford' | 'compare' | 'markets' | null;
 
 const advantage = (s: YearlySnapshot) => s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale;
-
-const INVESTED_SHARES = [
-  { value: 100, label: 'All of it' },
-  { value: 75, label: 'Most of it' },
-  { value: 50, label: 'Half' },
-  { value: 25, label: 'A quarter' },
-  { value: 0, label: 'None, spend it' },
-];
 
 function ChoiceList<T extends string>({ options, value, onPick }: {
   options: { value: T; label: string; detail?: string }[];
@@ -112,6 +105,7 @@ export default function SentenceView({
   affordability,
   savedScenarios,
   portfolioComparison,
+  investedOutcomes,
   realityCheck,
 }: SentenceViewProps) {
   const { INK, SERIES, axisProps, tooltipProps } = useChart();
@@ -286,12 +280,11 @@ export default function SentenceView({
 
   const cards = whyCards(baseline, sellYear, drivers, inv.investedShare);
   const toggle = (next: Panel) => setPanel(panel === next ? null : next);
-  const actions: { id: Panel | 'risk' | 'more'; label: string; primary?: boolean }[] = [
-    { id: 'more', label: 'More assumptions', primary: true },
-    { id: 'risk', label: 'Give me the odds' },
+  const actions: { id: Panel | 'more'; label: string }[] = [
     { id: 'afford', label: 'Can I afford to buy?' },
     { id: 'markets', label: 'Try another investment' },
     { id: 'compare', label: 'Compare scenarios' },
+    { id: 'more', label: 'All assumptions' },
   ];
 
   return (
@@ -347,10 +340,40 @@ export default function SentenceView({
             Net worth after selling everything and paying tax{realTerms ? ", in today's dollars" : ''}
           </span>
         </div>
-        <p className="m-0 inline-flex items-center gap-2 self-start rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] text-ink-2">
-          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.4" /><path d="M8 7.2v4M8 4.8v.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
-          {DISCLAIMER_SHORT}
-        </p>
+        <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface px-4 py-4 sm:px-5">
+          <div className="flex flex-col gap-1">
+            <h2 className="m-0 text-base font-semibold">How much of the monthly saving gets invested?</h2>
+            <p className="m-0 max-w-3xl text-sm leading-snug text-muted">
+              One of the biggest assumptions. Whichever option costs less each month invests this share of the difference
+              and spends the rest. Mortgage repayments can't be skipped; a renter's spare cash can.
+            </p>
+          </div>
+          <div role="radiogroup" aria-label="Share of the monthly saving invested" className="grid grid-cols-5 gap-1.5">
+            {INVESTED_SHARES.map((option) => {
+              const selected = (inv.investedShare ?? 100) === option.value;
+              const outcome = investedOutcomes.find((o) => o.share === option.value)?.advantage ?? 0;
+              const scale = Math.max(Math.abs(final.rentNetPositionAfterTax), Math.abs(final.mortgageNetPositionAfterSale), 1);
+              const side = Math.abs(outcome) < scale * 0.01 ? 'even' : outcome > 0 ? 'rent' : 'buy';
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => onInvestmentChange({ ...inv, investedShare: option.value })}
+                  className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-2 text-center ${
+                    selected ? 'border border-ink bg-raised' : 'border border-line hover:border-ink-2'
+                  }`}
+                >
+                  <span className={`text-sm ${selected ? 'font-semibold' : ''}`}>{option.short}</span>
+                  <span className={`font-mono text-[11px] sm:text-xs ${side === 'rent' ? 'text-rent' : side === 'buy' ? 'text-buy' : 'text-muted'}`}>
+                    {side === 'even' ? 'Even' : `${side === 'rent' ? 'Rent' : 'Buy'} ${formatCompactCurrency(Math.abs(outcome))}`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         {realityCheck}
       </section>
 
@@ -420,25 +443,33 @@ export default function SentenceView({
       </section>
 
       <section aria-label="Go further" className="flex flex-col gap-6">
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <div className="flex flex-col gap-1">
+            <h2 className="m-0 text-xl font-semibold">How sure is this?</h2>
+            <p className="m-0 max-w-xl text-[15px] leading-snug text-ink-2">
+              This answer assumes one steady future. See how often each option wins across thousands of possible ones.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenRisk}
+            className="min-h-12 shrink-0 self-start rounded-full bg-ink px-6 text-[15px] font-semibold text-ground sm:self-center"
+          >
+            Give me the odds
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+          <span className="mr-1 text-sm text-muted">Or:</span>
           {actions.map((a) => {
             const active = a.id === panel;
             return (
               <button
                 key={a.id}
                 type="button"
-                aria-expanded={a.id === 'afford' || a.id === 'markets' || a.id === 'compare' ? active : undefined}
-                onClick={() => {
-                  if (a.id === 'more') onOpenAssumptions();
-                  else if (a.id === 'risk') onOpenRisk();
-                  else toggle(a.id);
-                }}
-                className={`min-h-12 rounded-full px-5 text-[15px] ${
-                  a.primary
-                    ? 'bg-ink font-semibold text-ground'
-                    : active
-                      ? 'border border-ink bg-raised'
-                      : 'border border-line-strong bg-surface hover:border-ink-2'
+                aria-expanded={a.id === 'more' ? undefined : active}
+                onClick={() => (a.id === 'more' ? onOpenAssumptions() : toggle(a.id))}
+                className={`min-h-11 rounded-full px-4 text-[15px] ${
+                  active ? 'border border-ink bg-raised' : 'border border-line bg-transparent text-ink-2 hover:border-ink-2 hover:text-ink'
                 }`}
               >
                 {a.label}

@@ -13,6 +13,7 @@ import { calculateBreakEven } from './utils/breakeven';
 import { monteCarloToRealTerms, runMonteCarloSimulation } from './utils/monteCarlo';
 import type { MonteCarloRequest } from './utils/monteCarlo.worker';
 import { explainGap } from './utils/gap';
+import { INVESTED_SHARES } from './utils/narrative';
 import {
   DEFAULT_HORIZON,
   DEFAULT_INVESTMENT,
@@ -31,7 +32,6 @@ import SqueezeView from './components/SqueezeView';
 import SiteFooter from './components/SiteFooter';
 import PriceToIncomeCallout from './components/PriceToIncomeCallout';
 import { priceToIncome } from './utils/priceToIncome';
-import { DISCLAIMER_SHORT } from './site';
 import { ThemeContext, type Theme } from './components/chartTheme';
 import FocusAnalysis from './components/FocusAnalysis';
 import RiskView from './components/RiskView';
@@ -600,6 +600,10 @@ export default function RentVsMortgageCalculator() {
             affordability={affordabilityCard}
             savedScenarios={savedCard}
             portfolioComparison={portfolioCard}
+            investedOutcomes={INVESTED_SHARES.map(({ value }) => ({
+              share: value,
+              advantage: advantageFor(propertyInputs, rentInputs, { ...investmentInputs, investedShare: value }, timeHorizon),
+            }))}
             realityCheck={realityCheck}
           />
         )}
@@ -673,7 +677,7 @@ export default function RentVsMortgageCalculator() {
               {savedCard}
               <p className="m-0 max-w-3xl text-xs leading-relaxed text-muted">
                 Both households start with the same savings and spend the same each month. Whichever option is cheaper that
-                month invests the difference. {DISCLAIMER_SHORT}
+                month invests the difference.
               </p>
             </main>
           </div>

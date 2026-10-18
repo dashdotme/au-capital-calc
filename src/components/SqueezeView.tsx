@@ -196,7 +196,7 @@ export default function SqueezeView({
           rises, fewer people earning, forced sellers, falling share prices, rate cuts that prop prices back up, and
           profits drifting from pay packets to shareholders.
         </p>
-        <p className="m-0 text-sm font-medium text-ink-2">Every number here is an AI's guess. Not financial advice.</p>
+        <p className="m-0 text-sm font-medium text-ink-2">Every number here is an AI's guess.</p>
       </section>
 
       <section aria-label="Squeeze settings" className="card grid grid-cols-1 gap-8 px-5 py-6 sm:px-7 md:grid-cols-2">

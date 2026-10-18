@@ -23,6 +23,15 @@ export function investedPhrase(share = 100): string {
   return `${Math.round(share)}% of the difference`;
 }
 
+/** Invested-share choices offered in the sentence and the answer. */
+export const INVESTED_SHARES = [
+  { value: 100, label: 'All of it', short: 'All' },
+  { value: 75, label: 'Most of it', short: '75%' },
+  { value: 50, label: 'Half', short: 'Half' },
+  { value: 25, label: 'A quarter', short: '25%' },
+  { value: 0, label: 'None, spend it', short: 'None' },
+];
+
 export const INVESTED_SHARE_NOTE =
   "Each month, whichever option costs less invests this share of the saving and spends the rest. Most calculators assume all of it; mortgage repayments can't be skipped, but a renter's spare cash can. The deposit and starting savings are invested either way.";
 
