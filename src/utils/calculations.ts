@@ -165,6 +165,7 @@ export function runComparison(
   const frankingLevel = (investmentInputs.frankingLevel ?? 0) / 100;
   const reinvestDividends = investmentInputs.dividendReinvestment ?? true;
   const managementFee = (investmentInputs.managementFee ?? 0) / 100;
+  const investedShare = Math.min(100, Math.max(0, investmentInputs.investedShare ?? 100)) / 100;
   const offset = Math.max(0, propertyInputs.offsetAccountBalance ?? 0);
   const totalMonths = Math.max(0, Math.round(propertyInputs.loanTerm * 12));
 
@@ -193,6 +194,8 @@ export function runComparison(
   let cumulativeRent = 0;
   let cumulativeMovingCosts = 0;
   let cumulativeRenterInsurance = 0;
+  let renterSpent = 0;
+  let buyerSpent = 0;
 
   const results: YearlySnapshot[] = [];
 
@@ -222,6 +225,7 @@ export function runComparison(
       mortgageAnnualCost,
       mortgageContributions: buyer.contributions,
       mortgageSaleCosts: sellingCosts + propertyCGT,
+      mortgageSpent: buyerSpent,
       rentTotalPaid: cumulativeRent,
       rentMovingCosts: cumulativeMovingCosts,
       rentInsurance: cumulativeRenterInsurance,
@@ -232,6 +236,7 @@ export function runComparison(
       rentFrankingCredits: renter.frankingCredits,
       rentAnnualCost,
       rentContributions: renter.contributions,
+      rentSpent: renterSpent,
     });
   };
 
@@ -287,13 +292,18 @@ export function runComparison(
       const renterMoving = month === 12 ? movingCost : 0;
       const renterCost = monthlyRent + annualRenterInsurance / 12 + renterMoving;
 
-      // Grow existing holdings, then invest whatever the cheaper option saved this month.
+      // Grow existing holdings, then invest whatever the cheaper option saved this month,
+      // or the share of it that actually gets invested; the rest is spent.
       renter.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
       buyer.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
       if (ownerCost > renterCost) {
-        renter.contribute(ownerCost - renterCost);
+        const saving = ownerCost - renterCost;
+        renter.contribute(saving * investedShare);
+        renterSpent += saving * (1 - investedShare);
       } else {
-        buyer.contribute(renterCost - ownerCost);
+        const saving = renterCost - ownerCost;
+        buyer.contribute(saving * investedShare);
+        buyerSpent += saving * (1 - investedShare);
       }
 
       propertyValue *= 1 + monthlyPropertyGrowth;
@@ -341,9 +351,9 @@ const MONETARY_KEYS = [
   'mortgageEquity', 'mortgageTotalPaid', 'mortgagePropertyValue', 'mortgageLoanBalance',
   'mortgageInvestmentValue', 'mortgageNetPosition', 'mortgageNetPositionAfterSale',
   'mortgageMaintenance', 'mortgageRates', 'mortgageInsurance', 'mortgageTotalInterest',
-  'mortgageAnnualCost', 'mortgageContributions', 'mortgageSaleCosts', 'rentTotalPaid', 'rentMovingCosts', 'rentInsurance',
+  'mortgageAnnualCost', 'mortgageContributions', 'mortgageSaleCosts', 'mortgageSpent', 'rentTotalPaid', 'rentMovingCosts', 'rentInsurance',
   'rentInvestmentValue', 'rentNetPosition', 'rentNetPositionAfterTax', 'rentDividends',
-  'rentFrankingCredits', 'rentAnnualCost', 'rentContributions',
+  'rentFrankingCredits', 'rentAnnualCost', 'rentContributions', 'rentSpent',
 ] as const satisfies readonly (keyof YearlySnapshot)[];
 
 /** Deflate every dollar figure to today's dollars. */
@@ -405,7 +415,8 @@ export type MetricKey =
   | 'rentIncreaseRate'
   | 'stockMarketReturn'
   | 'propertyGrowthRate'
-  | 'dividendYield';
+  | 'dividendYield'
+  | 'investedShare';
 
 /** Return copies of the inputs with a single metric overridden. */
 /** Cash spent on buying beyond the deposit: stamp duty and other costs, less any first home owner grant. */
@@ -430,6 +441,7 @@ export function withMetric(
     case 'stockMarketReturn':
     case 'propertyGrowthRate':
     case 'dividendYield':
+    case 'investedShare':
       return [propertyInputs, rentInputs, { ...investmentInputs, [metricKey]: value }];
     default:
       return [propertyInputs, rentInputs, investmentInputs];
@@ -458,6 +470,8 @@ export function getMetricValue(
       return resolveScenarioValue(investmentInputs.propertyGrowthRate, 'baseline');
     case 'dividendYield':
       return investmentInputs.dividendYield ?? 0;
+    case 'investedShare':
+      return investmentInputs.investedShare ?? 100;
     default:
       return 0;
   }

@@ -13,6 +13,7 @@ export interface GapDriver {
  * capital and spend the same each month, so the gap is exactly:
  *   home price growth − sale costs − purchase costs − interest − owner running costs
  *   + rent costs avoided − (renter's investment growth − buyer's investment growth)
+ *   + (savings the renter spent − savings the buyer spent)
  * `deflator` converts the input-based (year 0) amounts when the snapshot is in today's dollars.
  */
 export function explainGap(s: YearlySnapshot, property: PropertyInputs, deflator = 1): GapDriver[] {
@@ -32,5 +33,9 @@ export function explainGap(s: YearlySnapshot, property: PropertyInputs, deflator
     { key: 'purchase', label: (property.firstHomeGrant ?? 0) > 0 ? 'Purchase costs, less the grant' : 'Stamp duty and purchase costs', amount: -purchaseCosts },
     { key: 'sale', label: 'Selling costs', amount: -s.mortgageSaleCosts },
     { key: 'investing', label: "Renter's extra investment growth", amount: buyerGrowth - renterGrowth },
+    // Only when some of the monthly saving is spent rather than invested
+    ...(s.rentSpent + s.mortgageSpent > 0.5
+      ? [{ key: 'spent', label: 'Savings spent, not invested', amount: s.rentSpent - s.mortgageSpent }]
+      : []),
   ];
 }

@@ -15,6 +15,17 @@ export const PORTFOLIO_PHRASES: Record<string, string> = {
   cash: 'cash savings',
 };
 
+/** How the invested share reads mid-sentence: "…and invest all of the difference in…". */
+export function investedPhrase(share = 100): string {
+  if (share >= 100) return 'all of the difference';
+  if (share <= 0) return 'none of the difference';
+  if (share === 50) return 'half the difference';
+  return `${Math.round(share)}% of the difference`;
+}
+
+export const INVESTED_SHARE_NOTE =
+  "Each month, whichever option costs less invests this share of the saving and spends the rest. Most calculators assume all of it; mortgage repayments can't be skipped, but a renter's spare cash can. The deposit and starting savings are invested either way.";
+
 export type Winner = 'rent' | 'buy' | 'even';
 
 /** Within 1% of the larger net worth counts as a tie. */
@@ -63,6 +74,8 @@ export function flipPhrase(result: BreakEvenResult): string | null {
       return `upkeep cost ${up ? 'more' : 'less'} than ${percent(v)} of the home's value a year`;
     case 'dividendYield':
       return `dividend yields were ${up ? 'above' : 'below'} ${percent(v)}`;
+    case 'investedShare':
+      return `${up ? 'more' : 'less'} than ${Math.round(v)}% of the monthly saving were invested`;
     default:
       return null;
   }
@@ -88,7 +101,7 @@ export interface WhyCard {
 }
 
 /** Three plain-language reasons behind the result. */
-export function whyCards(baseline: YearlySnapshot[], sellYear: number, drivers: GapDriver[]): WhyCard[] {
+export function whyCards(baseline: YearlySnapshot[], sellYear: number, drivers: GapDriver[], investedShare = 100): WhyCard[] {
   const first = baseline[Math.min(1, baseline.length - 1)];
   const own = first.mortgageAnnualCost / 12;
   const rent = first.rentAnnualCost / 12;
@@ -108,8 +121,8 @@ export function whyCards(baseline: YearlySnapshot[], sellYear: number, drivers: 
     {
       figure: `${formatCurrency(own)} vs ${formatCurrency(rent)}`,
       text: ownCostsMore
-        ? `Owning costs ${howMuch} each month at the start. The renter invests the difference.`
-        : `Renting costs ${howMuch} each month at the start. The owner invests the difference.`,
+        ? `Owning costs ${howMuch} each month at the start. The renter invests ${investedPhrase(investedShare)}.`
+        : `Renting costs ${howMuch} each month at the start. The owner invests ${investedPhrase(investedShare)}.`,
     },
   ];
   if (investing > growth) {

@@ -19,7 +19,7 @@ import { NEW_HOME_DRAG_YEARS, NEW_HOME_GROWTH_DRAG } from '../utils/calculations
 import NewHomeGrowthSources from './NewHomeGrowthSources';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
 import { formatAdvantage, formatCompactCurrency, formatCurrency } from '../utils/format';
-import { PORTFOLIO_PHRASES, describeFlip, describeTiming, whyCards, winnerAt } from '../utils/narrative';
+import { INVESTED_SHARE_NOTE, PORTFOLIO_PHRASES, describeFlip, describeTiming, investedPhrase, whyCards, winnerAt } from '../utils/narrative';
 import { AdornedInput } from './InputField';
 import SentencePill from './SentencePill';
 import GapExplainer from './GapExplainer';
@@ -56,6 +56,14 @@ interface SentenceViewProps {
 type Panel = 'afford' | 'compare' | 'markets' | null;
 
 const advantage = (s: YearlySnapshot) => s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale;
+
+const INVESTED_SHARES = [
+  { value: 100, label: 'All of it' },
+  { value: 75, label: 'Most of it' },
+  { value: 50, label: 'Half' },
+  { value: 25, label: 'A quarter' },
+  { value: 0, label: 'None, spend it' },
+];
 
 function ChoiceList<T extends string>({ options, value, onPick }: {
   options: { value: T; label: string; detail?: string }[];
@@ -225,7 +233,23 @@ export default function SentenceView({
           </span>
         )}
       </SentencePill>{' '}
-      and invest the difference in{' '}
+      and invest{' '}
+      <SentencePill label={investedPhrase(inv.investedShare)} title="Share of the monthly saving invested">
+        {(close) => (
+          <span className="flex flex-col gap-2">
+            <ChoiceList
+              value={String(inv.investedShare ?? 100)}
+              options={INVESTED_SHARES.map((x) => ({ value: String(x.value), label: x.label, detail: `${x.value}%` }))}
+              onPick={(value) => {
+                onInvestmentChange({ ...inv, investedShare: Number(value) });
+                close();
+              }}
+            />
+            <span className="text-xs leading-snug text-muted">{INVESTED_SHARE_NOTE}</span>
+          </span>
+        )}
+      </SentencePill>{' '}
+      in{' '}
       <span className="whitespace-nowrap">
       <SentencePill label={(inv.portfolio && PORTFOLIO_PHRASES[inv.portfolio]) ?? 'my own mix'} title="Invest the savings in">
         {(close) => (
@@ -259,7 +283,7 @@ export default function SentenceView({
     </div>
   );
 
-  const cards = whyCards(baseline, sellYear, drivers);
+  const cards = whyCards(baseline, sellYear, drivers, inv.investedShare);
   const toggle = (next: Panel) => setPanel(panel === next ? null : next);
   const actions: { id: Panel | 'risk' | 'more'; label: string; primary?: boolean }[] = [
     { id: 'more', label: 'More assumptions', primary: true },

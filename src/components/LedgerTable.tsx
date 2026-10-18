@@ -80,6 +80,9 @@ export default function LedgerTable({
         { label: 'Maintenance, rates and insurance', buy: s.mortgageMaintenance + s.mortgageRates + s.mortgageInsurance, rent: null, kind: 'cost' },
         { label: 'Rent, moving and contents insurance', buy: null, rent: s.rentTotalPaid + s.rentMovingCosts + s.rentInsurance, kind: 'cost' },
         { label: (property.firstHomeGrant ?? 0) > 0 ? 'Purchase costs, less the grant' : 'Stamp duty and purchase costs', buy: purchaseCosts, rent: null, kind: 'cost' },
+        ...(s.rentSpent + s.mortgageSpent > 0.5
+          ? [{ label: 'Savings spent, not invested', buy: s.mortgageSpent, rent: s.rentSpent, kind: 'cost' as const }]
+          : []),
       ],
     },
     {

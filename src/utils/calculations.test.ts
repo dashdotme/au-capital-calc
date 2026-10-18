@@ -186,6 +186,38 @@ describe('runComparison', () => {
   });
 });
 
+describe('share of the monthly saving invested', () => {
+  const at = (investedShare: number, years = 30) =>
+    last(runComparison(property, rent, { ...investment, investedShare }, years));
+
+  it('defaults to investing all of it', () => {
+    expect(at(100)).toEqual(last(runComparison(property, rent, investment, 30)));
+    expect(at(100).rentSpent).toBe(0);
+  });
+
+  it('spends the rest, so renting falls behind as less is invested', () => {
+    const all = at(100);
+    const half = at(50);
+    const none = at(0);
+    expect(half.rentSpent).toBeGreaterThan(0);
+    expect(half.rentContributions + half.rentSpent).toBeCloseTo(all.rentContributions, 2);
+    // With nothing invested, the renter's only contribution is the starting capital
+    expect(none.rentContributions).toBeCloseTo(at(0, 0).rentContributions, 2);
+    expect(half.rentNetPositionAfterTax).toBeLessThan(all.rentNetPositionAfterTax);
+    expect(none.rentNetPositionAfterTax).toBeLessThan(half.rentNetPositionAfterTax);
+    // The buyer is unaffected while owning still costs more every month (before the first move)
+    expect(at(50, 2).mortgageNetPositionAfterSale).toBeCloseTo(at(100, 2).mortgageNetPositionAfterSale, 2);
+  });
+
+  it('finds the share at which buying wins', () => {
+    const result = calculateBreakEven(property, rent, investment, 30).results.find((r) => r.metricKey === 'investedShare')!;
+    if (result.breakEvenValue !== null) {
+      expect(result.breakEvenValue).toBeGreaterThan(0);
+      expect(result.breakEvenValue).toBeLessThan(100);
+    }
+  });
+});
+
 describe('helpers', () => {
   it('deflates to real terms', () => {
     const real = toRealTerms(runComparison(property, rent, investment, 10), 2.5);
@@ -261,6 +293,17 @@ describe('gap explanation', async () => {
       const results = runComparison(withGrant, rent, investment, years);
       const s = last(results);
       const total = explainGap(s, withGrant).reduce((sum, d) => sum + d.amount, 0);
+      expect(total).toBeCloseTo(s.mortgageNetPositionAfterSale - s.rentNetPositionAfterTax, 2);
+    }
+  });
+
+  it('adds up when part of the saving is spent, on both sides', () => {
+    // Cheap rent first makes the buyer the saver late on, once the loan is paid off
+    for (const monthlyRent of [3000, 6000]) {
+      const r = { ...rent, monthlyRent };
+      const s = last(runComparison(property, r, { ...investment, investedShare: 40 }, 40));
+      expect(s.rentSpent + s.mortgageSpent).toBeGreaterThan(0);
+      const total = explainGap(s, property).reduce((sum, d) => sum + d.amount, 0);
       expect(total).toBeCloseTo(s.mortgageNetPositionAfterSale - s.rentNetPositionAfterTax, 2);
     }
   });

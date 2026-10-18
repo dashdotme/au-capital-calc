@@ -27,7 +27,7 @@ The application follows a unidirectional data flow:
 ### Comparison Model (equal-budget net worth)
 
 - Both households start with the same capital: deposit + stamp duty + other costs + offset balance. The buyer spends it on the purchase and keeps the offset as cash; the renter invests all of it.
-- Each month both spend the same total: whichever option has lower housing costs that month invests the difference (the buyer gets a side portfolio once owning becomes cheaper, e.g. after the loan is paid off).
+- Each month both spend the same total: whichever option has lower housing costs that month invests the difference (the buyer gets a side portfolio once owning becomes cheaper, e.g. after the loan is paid off). `InvestmentInputs.investedShare` (default 100%) invests only part of that saving; the rest is spent and tracked as `rentSpent` / `mortgageSpent`, which the gap breakdown counts so it still adds up.
 - "Net position" fields are net worths, directly comparable. `...AfterSale` / `...AfterTax` liquidate everything: selling costs, property CGT, brokerage and stock CGT on gains over the true cost base.
 - Do not subtract costs paid from net worth: the equal-budget setup already accounts for them, and subtracting again double counts.
 

@@ -10,6 +10,7 @@ import { AU_STATES, isAuState, stampDutyBasis } from '../utils/stampDuty';
 import { NEW_HOME_GROWTH_NOTE, NEW_HOME_GROWTH_SHORT, grantNote, guaranteeApplies, lmiNote } from '../utils/homeBuyerSupport';
 import MultiInput from './MultiInput';
 import NewHomeGrowthSources from './NewHomeGrowthSources';
+import { INVESTED_SHARE_NOTE } from '../utils/narrative';
 
 interface AssumptionsPanelProps {
   propertyInputs: PropertyInputs;
@@ -280,6 +281,9 @@ export default function AssumptionsPanel({
             <option value="custom" disabled={inv.portfolio !== undefined}>Custom</option>
           </select>
         </label>
+        <InputField label="Share of the monthly saving invested" format="percent" value={inv.investedShare ?? 100}
+          onChange={(investedShare) => onInvestmentChange({ ...inv, investedShare: Math.min(100, Math.max(0, investedShare)) })}
+          helpText={INVESTED_SHARE_NOTE} />
         {scenarioField('Total return / year', inv.stockMarketReturn,
           (stockMarketReturn) => onPortfolioParam({ stockMarketReturn }), 'stockMarketReturn', 'percent',
           'Including dividends, before fees.')}

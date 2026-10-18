@@ -9,5 +9,6 @@ export function flipDistance(result: BreakEvenResult): number {
 }
 
 export function formatMetricValue(result: BreakEvenResult, value: number): string {
-  return result.metricKey === 'monthlyRent' ? formatCurrency(value) : `${value.toFixed(2)}%`;
+  if (result.metricKey === 'monthlyRent') return formatCurrency(value);
+  return result.metricKey === 'investedShare' ? `${Math.round(value)}%` : `${value.toFixed(2)}%`;
 }

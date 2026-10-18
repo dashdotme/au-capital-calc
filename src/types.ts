@@ -57,6 +57,11 @@ export interface InvestmentInputs {
   dividendReinvestment?: boolean;
   /** Annual fund management fee (MER), % of balance; deducted from the total return */
   managementFee?: number;
+  /**
+   * Share (%) of each month's housing saving that the cheaper household invests; the rest is
+   * spent. 100 is the textbook assumption that the renter invests every dollar of the difference.
+   */
+  investedShare?: number;
   /** Year-to-year volatility of the portfolio's returns (%), used by Monte Carlo */
   stockVolatility?: number;
   /** Id of the portfolio preset these values came from, if any */
@@ -92,6 +97,8 @@ export interface YearlySnapshot {
   mortgageContributions: number;
   /** Selling costs plus CGT if the home were sold this year */
   mortgageSaleCosts: number;
+  /** Cumulative monthly savings the buyer spent instead of investing (see `investedShare`) */
+  mortgageSpent: number;
   rentTotalPaid: number;
   rentMovingCosts: number;
   rentInsurance: number;
@@ -107,6 +114,8 @@ export interface YearlySnapshot {
   rentAnnualCost: number;
   /** Cumulative new savings the renter has invested, including the starting capital */
   rentContributions: number;
+  /** Cumulative monthly savings the renter spent instead of investing (see `investedShare`) */
+  rentSpent: number;
 }
 
 export interface ScenarioResults {

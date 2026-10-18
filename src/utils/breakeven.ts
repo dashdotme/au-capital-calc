@@ -88,6 +88,8 @@ function getSearchRange(metricKey: string, currentValue: number): [number, numbe
       return [-2, 15]; // -2% to 15%
     case 'dividendYield':
       return [0, 8]; // 0% to 8%
+    case 'investedShare':
+      return [0, 100];
     default:
       return [0, 100];
   }
@@ -112,6 +114,8 @@ function getMetricLabel(metricKey: string): string {
       return 'Property growth';
     case 'dividendYield':
       return 'Dividend yield';
+    case 'investedShare':
+      return 'Saving invested';
     default:
       return metricKey;
   }
@@ -180,6 +184,7 @@ export function calculateBreakEven(
     'stockMarketReturn',
     'propertyGrowthRate',
     'dividendYield',
+    'investedShare',
   ].map((key) => ({ key, current: getMetricValue(propertyInputs, rentInputs, investmentInputs, key) }));
 
   const results: BreakEvenResult[] = metrics.map(({ key, current }) => {

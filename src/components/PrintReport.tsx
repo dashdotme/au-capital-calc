@@ -10,6 +10,7 @@ import { CITIES } from '../cities';
 import { PORTFOLIOS } from '../portfolios';
 import { PALETTES, niceTicks, yearTicks } from './chartTheme';
 import { DISCLAIMER } from '../site';
+import { investedPhrase } from '../utils/narrative';
 
 // The printed report is always light, whatever the screen theme
 const SERIES = PALETTES.light.SERIES;
@@ -124,6 +125,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
     ['Moving', `Every ${r.movingFrequency} yrs, ${formatCurrency(r.movingCost)} each`],
     ['Portfolio', portfolio ? `${portfolio.name} (${portfolio.example})` : 'Custom'],
     ['Total return', pct(inv.stockMarketReturn)],
+    ['Monthly saving invested', `${inv.investedShare ?? 100}%`],
     ['Dividend yield / franked', `${inv.dividendYield ?? 0}% / ${inv.frankingLevel ?? 0}%`],
     ['Fund fee / brokerage', `${inv.managementFee ?? 0}% / ${inv.stockTransactionCost}%`],
     ['Property growth', `${pct(inv.propertyGrowthRate)}${p.newHome ? ` (${NEW_HOME_GROWTH_DRAG} point lower for the first ${NEW_HOME_DRAG_YEARS} years: new home)` : ''}`],
@@ -173,7 +175,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
         <ul className="m-0 mt-3 list-disc pl-5 text-[10pt]">
           <li>
             Year 1 housing cost: {formatCurrency(first.mortgageAnnualCost / 12)}/month to own vs{' '}
-            {formatCurrency(first.rentAnnualCost / 12)}/month to rent; the cheaper option invests the difference.
+            {formatCurrency(first.rentAnnualCost / 12)}/month to rent; the cheaper option invests {investedPhrase(inv.investedShare)}.
           </li>
           <li>
             {crossoverYear === null
@@ -288,8 +290,8 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
           {' '}(the link in this PDF restores every assumption).
         </p>
         <p className="m-0 mt-1">
-          Both households start with the same savings and spend the same each month; the cheaper option invests the
-          difference. {DISCLAIMER}
+          Both households start with the same savings and spend the same each month; the cheaper option invests
+          {' '}{investedPhrase(inv.investedShare)}{(inv.investedShare ?? 100) < 100 ? ' and spends the rest' : ''}. {DISCLAIMER}
         </p>
       </footer>
     </article>

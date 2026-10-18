@@ -51,6 +51,7 @@ export const DEFAULT_INVESTMENT: InvestmentInputs = applyPortfolio(
     inflationRate: 2.5,
     stockTransactionCost: 0.1,
     dividendReinvestment: true,
+    investedShare: 100,
   },
   defaultPortfolio
 );
