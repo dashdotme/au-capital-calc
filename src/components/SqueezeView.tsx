@@ -177,6 +177,8 @@ export default function SqueezeView({
     nominalDip = Math.max(nominalDip, 1 - s.mortgagePropertyValue / high);
   }
   const incomeIndex = (growth: number[], year: number) => growth.slice(0, year).reduce((x, g) => x * (1 + g / 100), 1);
+  // Shares lag too while unemployment climbs (capital deflation), measured at the top
+  const sharesLag = 1 - incomeIndex(model.squeeze.stockMarketReturn, topYear) / incomeIndex(model.base.stockMarketReturn, topYear);
   const incomeGap = 1 - incomeIndex(model.squeeze.wages, sellYear) / incomeIndex(model.base.wages, sellYear);
 
   const gapData = model.squeezed.map((s, i) => ({ year: s.year, squeeze: advantage(s), normal: advantage(model.normal[i]) }));
@@ -191,8 +193,8 @@ export default function SqueezeView({
         <p className="m-0 max-w-2xl text-lg leading-relaxed text-ink-2">
           What if AI slowly pushes unemployment up? This is a toy model of that guess, written by an AI, about AI, so season
           generously with salt. It runs your current scenario through rising unemployment and what tends to follow: slower pay
-          rises, fewer people earning, forced sellers, rate cuts that prop prices back up, and profits drifting from pay
-          packets to shareholders.
+          rises, fewer people earning, forced sellers, falling share prices, rate cuts that prop prices back up, and
+          profits drifting from pay packets to shareholders.
         </p>
         <p className="m-0 text-sm font-medium text-ink-2">Every number here is an AI-generated estimate. Not financial advice.</p>
       </section>
@@ -253,6 +255,12 @@ export default function SqueezeView({
             Household income from work ends up {Math.abs(Math.round(incomeGap * 100))}% {incomeGap >= 0 ? 'lower' : 'higher'} by year {sellYear}: slower
             pay rises, and fewer people in work.
           </li>
+          {sharesLag >= 0.005 && (
+            <li>
+              Capital deflates too: by year {topYear} your investments are {Math.round(sharesLag * 100)}% behind where they'd otherwise
+              be, as earnings fall with spending. Most of that comes back once unemployment stops rising.
+            </li>
+          )}
           {!options.rateCuts && <li>Without rate cuts nothing props prices up, so they track incomes down.</li>}
         </ul>
         <label className="flex max-w-md items-center gap-3 text-sm text-muted">
@@ -388,7 +396,8 @@ export default function SqueezeView({
             gap, moving half way each year, and mortgage rates follow. Home prices track income growth, a supply term, and
             borrowing power from rate cuts, which reaches prices a quarter at a time. While unemployment is rising, forced
             sales and caution take 5% off prices per point of rise, and half of that comes back afterwards. Rents follow
-            wages, less a point per point of rise as people move in together.
+            wages, less a point per point of rise as people move in together. Share prices fall 8% per point of rise (less for
+            balanced funds, not at all for cash), and 60% of that comes back once unemployment stops rising.
           </p>
           <p className="m-0">
             For comparison: unemployment hit 11% in the early 1990s with rates cut from 17% to under 5%, and prices barely

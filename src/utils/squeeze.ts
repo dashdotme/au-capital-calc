@@ -20,7 +20,9 @@
 //   as lenders stay cautious, less forced selling and caution while unemployment is rising
 //   (half of which unwinds once it stops rising).
 // - Rents: follow wages, less weaker household formation while unemployment rises.
-// - Investments: profits shift from wages to companies, by portfolio.
+// - Investments: capital deflates too. While unemployment rises, earnings fall and share
+//   prices with them (`MARKET_DISTRESS`, scaled by the portfolio's share exposure); most of
+//   that comes back once it stops rising. Separately, profits shift from wages to companies.
 import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
 import { calculateMortgagePayment, resolveScenarioValue, type RatePaths } from './calculations';
 
@@ -66,6 +68,22 @@ const DISTRESS_REBOUND = 0.5;
 /** Share of the accumulated borrowing-capacity change that reaches prices each year */
 const CAPACITY_PASS_THROUGH = 0.25;
 
+/** Share price fall per point unemployment rises in a year (earnings recession) */
+export const MARKET_DISTRESS = 8;
+/** Share of the market fall that comes back once unemployment stops rising, and how fast */
+const MARKET_REBOUND = 0.6;
+const MARKET_REBOUND_SPEED = 0.5;
+
+/** How much of each portfolio moves with the share market */
+export const SHARE_EXPOSURE: Record<string, number> = {
+  global: 1,
+  us: 1,
+  australian: 1,
+  'high-growth': 0.9,
+  balanced: 0.6,
+  cash: 0,
+};
+
 /** Extra annual return per point of lost wage growth, by portfolio (profits flowing to shareholders) */
 export const PROFIT_SHIFT: Record<string, number> = {
   global: 1.5,
@@ -109,6 +127,7 @@ export function buildSqueezePaths(
   const supply = baseGrowth - baseWages;
   const neutralCash = baseRate - MORTGAGE_MARGIN;
   const shift = options.profitShift ? (PROFIT_SHIFT[investment.portfolio ?? ''] ?? 0.8) : 0;
+  const exposure = SHARE_EXPOSURE[investment.portfolio ?? ''] ?? 0.8;
   const rateResponse = options.rateCuts ? RATE_RESPONSE : 0;
   const unemployment = unemploymentPath(options, years);
 
@@ -120,6 +139,7 @@ export function buildSqueezePaths(
   let normalUnemployment = START_UNEMPLOYMENT;
   let pendingCapacity = 0;
   let pendingRebound = 0;
+  let pendingMarketRebound = 0;
   for (let year = 1; year <= years; year++) {
     const u = unemployment[year - 1];
     const rising = Math.max(0, u - previousUnemployment);
@@ -146,7 +166,11 @@ export function buildSqueezePaths(
     paths.interestRate.push(rate);
     paths.propertyGrowthRate.push(houseGrowth);
     paths.rentIncreaseRate.push(wageGrowth - HOUSEHOLD_FORMATION * rising);
-    paths.stockMarketReturn.push(baseReturn + shift * PHILLIPS * slack);
+    const marketFall = MARKET_DISTRESS * exposure * rising;
+    pendingMarketRebound += marketFall * MARKET_REBOUND;
+    const marketRebound = rising > 0 ? 0 : pendingMarketRebound * MARKET_REBOUND_SPEED;
+    pendingMarketRebound -= marketRebound;
+    paths.stockMarketReturn.push(baseReturn + shift * PHILLIPS * slack - marketFall + marketRebound);
     paths.wages.push(incomeGrowth);
 
     previousRate = rate;

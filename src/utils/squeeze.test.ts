@@ -103,3 +103,19 @@ describe('price-to-income check', async () => {
     expect(check.atSale / check.now).toBeCloseTo(1, 1);
   });
 });
+
+describe('capital deflation in the squeeze', () => {
+  const paths = (portfolio: string, profitShift = false) =>
+    buildSqueezePaths(P, R, { ...I, portfolio }, 30, { ...central, profitShift });
+
+  it('drags share returns down while unemployment rises, then partly rebounds', () => {
+    const shares = paths('global');
+    expect(shares.stockMarketReturn[4]).toBeLessThan(shares.stockMarketReturn[0]);
+    expect(shares.stockMarketReturn[8]).toBeGreaterThan(shares.stockMarketReturn[0]);
+  });
+
+  it('leaves cash alone', () => {
+    const cash = paths('cash');
+    expect(cash.stockMarketReturn[4]).toBe(cash.stockMarketReturn[0]);
+  });
+});
