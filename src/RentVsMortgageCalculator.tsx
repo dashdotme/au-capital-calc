@@ -143,19 +143,34 @@ function Segmented<T extends string | boolean>({
  * Easter egg: hovering the very bottom-right corner (desktop) slides out a handwritten note
  * that opens the AI Squeeze view.
  */
+/** A small robot peeking up from the bottom-right corner. */
+function Robot() {
+  return (
+    <svg width="44" height="52" viewBox="0 0 44 52" aria-hidden className="robot-wobble">
+      <line x1="22" y1="4" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="22" cy="4" r="3" className="robot-blink fill-rent" />
+      <rect x="6" y="12" width="32" height="24" rx="7" className="fill-surface" stroke="currentColor" strokeWidth="2" />
+      <circle cx="16" cy="23" r="3" fill="currentColor" />
+      <circle cx="28" cy="23" r="3" fill="currentColor" />
+      <path d="M17 30q5 3 10 0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <rect x="2" y="20" width="4" height="8" rx="2" fill="currentColor" />
+      <rect x="38" y="20" width="4" height="8" rx="2" fill="currentColor" />
+      <rect x="11" y="38" width="22" height="14" rx="4" className="fill-surface" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
 function SqueezeEgg({ onOpen }: { onOpen: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div
-      className="pointer-events-none fixed right-0 bottom-0 z-20 hidden lg:block"
+      className="pointer-events-none fixed right-0 bottom-0 z-20 hidden items-end gap-1 pr-4 lg:flex"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      {/* The invisible hotspot that catches the mouse */}
-      <div aria-hidden className="pointer-events-auto absolute right-0 bottom-0 h-10 w-10" />
       <div
-        className={`relative flex origin-bottom-right p-3 transition-all duration-300 ${
-          open ? 'pointer-events-auto scale-100 opacity-100' : 'translate-x-6 translate-y-6 scale-90 opacity-0'
+        className={`mb-12 origin-bottom-right transition-all duration-300 ${
+          open ? 'pointer-events-auto scale-100 opacity-100' : 'translate-x-4 translate-y-4 scale-90 opacity-0'
         }`}
       >
         <button
@@ -164,11 +179,22 @@ function SqueezeEgg({ onOpen }: { onOpen: () => void }) {
           onClick={onOpen}
           className="-rotate-3 rounded-xl border border-line-strong bg-surface px-4 py-2.5 text-right font-[Caveat] text-[21px] leading-[1.05] font-semibold text-ink-2 shadow-lg hover:text-ink"
         >
-          psst. want to see what AI
+          beep boop. want to see what AI
           <br />
           thinks AI might do to the markets?
         </button>
       </div>
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Open the AI squeeze"
+        onClick={onOpen}
+        className={`pointer-events-auto text-ink-2 transition-all duration-300 hover:text-ink ${
+          open ? 'translate-y-0 opacity-100' : 'translate-y-5 opacity-60'
+        }`}
+      >
+        <Robot />
+      </button>
     </div>
   );
 }

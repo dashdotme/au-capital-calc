@@ -130,8 +130,32 @@
   animation: change-flash 5s ease-out forwards;
 }
 
+/* The squeeze easter-egg robot: an idle wobble every few seconds, and a blinking antenna */
+@keyframes robot-wobble {
+  0%, 86%, 100% { transform: rotate(0deg); }
+  89% { transform: rotate(-9deg); }
+  92% { transform: rotate(7deg); }
+  95% { transform: rotate(-4deg); }
+}
+
+@keyframes robot-blink {
+  0%, 45%, 100% { opacity: 1; }
+  50%, 95% { opacity: 0.25; }
+}
+
+.robot-wobble {
+  transform-origin: 50% 100%;
+  animation: robot-wobble 6s ease-in-out infinite;
+}
+
+.robot-blink {
+  animation: robot-blink 1.6s steps(1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .change-flash {
+  .change-flash,
+  .robot-wobble,
+  .robot-blink {
     animation: none;
   }
 }
