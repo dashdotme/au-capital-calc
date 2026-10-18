@@ -3,6 +3,7 @@ import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
 import {
   calculateMortgagePayment,
   findBuyCrossoverYear,
+  resolveScenarioValue,
   runComparison,
   toRealTerms,
 } from './calculations';
@@ -111,6 +112,15 @@ describe('runComparison', () => {
       runComparison({ ...frictionless.property, stampDuty: 40000, firstHomeGrant: 30000 }, frictionless.rent, frictionless.investment, 10)
     );
     expect(r.rentNetPositionAfterTax - r.mortgageNetPositionAfterSale).toBeCloseTo(10000, 0);
+  });
+
+  it('grows a new home 1 point slower for its first 10 years', () => {
+    const value = (newHome: boolean, years: number) =>
+      last(runComparison({ ...property, newHome }, rent, investment, years)).mortgagePropertyValue;
+    const growth = resolveScenarioValue(investment.propertyGrowthRate, 'baseline') / 100;
+    const drag = ((1 + growth - 0.01) / (1 + growth)) ** 10;
+    expect(value(true, 10) / value(false, 10)).toBeCloseTo(drag, 6);
+    expect(value(true, 25) / value(false, 25)).toBeCloseTo(drag, 6);
   });
 
   it('invests the buyer surplus when renting costs more', () => {

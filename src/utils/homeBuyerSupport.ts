@@ -12,6 +12,7 @@
 import type { PropertyInputs } from '../types';
 import { calculateStampDuty, type AuState } from './stampDuty';
 import { formatCurrency } from './format';
+import { NEW_HOME_DRAG_YEARS, NEW_HOME_GROWTH_DRAG } from './calculations';
 
 const GRANTS: Record<AuState, { amount: number; cap: number | null } | null> = {
   NSW: { amount: 10000, cap: 600000 },
@@ -107,8 +108,11 @@ export function depositNote(p: Purchase & Pick<PropertyInputs, 'lmi' | 'lmiEstim
   return lmi > 0 ? `under 20%: about ${formatCurrency(lmi)} mortgage insurance` : 'under 20% usually means mortgage insurance';
 }
 
+/** "New home: 1 point lower for the first 10 years." */
+export const NEW_HOME_GROWTH_SHORT = `New home: ${NEW_HOME_GROWTH_DRAG} point lower for the first ${NEW_HOME_DRAG_YEARS} years.`;
+
 export const NEW_HOME_GROWTH_NOTE =
-  'New homes usually sell at a premium and more of the price is a building that wears out, so they tend to grow more slowly than established homes, especially apartments. Consider a lower growth rate.';
+  `New homes sell at a premium and more of the price is a building that wears out, so they grow more slowly at first. Modelled as ${NEW_HOME_GROWTH_DRAG} point a year below your growth rate for the first ${NEW_HOME_DRAG_YEARS} years, about 10% less value by then.`;
 
 /**
  * Recalculate everything that follows from price, deposit, state and buyer: stamp duty (when

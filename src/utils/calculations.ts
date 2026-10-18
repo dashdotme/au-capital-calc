@@ -30,6 +30,20 @@ export function calculateMortgagePayment(
 }
 
 /**
+ * A new home's value grows more slowly at first: it was bought at a new-build premium
+ * (about 6% on average, up to 15%) and more of its price is a building that depreciates.
+ * Modelled as growth 1 point a year below the input for the first 10 years, leaving the
+ * home roughly 10% below an established one bought at the same price. A judgment call:
+ * there is no rigorous Australian estimate.
+ */
+export const NEW_HOME_GROWTH_DRAG = 1;
+export const NEW_HOME_DRAG_YEARS = 10;
+
+/** Points to subtract from property growth in a given year. */
+export const newHomeGrowthDrag = (p: Pick<PropertyInputs, 'newHome'>, year: number) =>
+  p.newHome && year <= NEW_HOME_DRAG_YEARS ? NEW_HOME_GROWTH_DRAG : 0;
+
+/**
  * Optional per-year rate overrides (index 0 = year 1), used by the Monte Carlo
  * simulation to model year-to-year volatility. Missing entries fall back to the
  * constant input rate.
@@ -226,7 +240,7 @@ export function runComparison(
   for (let year = 1; year <= years; year++) {
     const interestRate = rateFor(paths.interestRate, year, baseInterestRate);
     const stockReturn = rateFor(paths.stockMarketReturn, year, baseStockReturn) / 100 - managementFee;
-    const propertyGrowth = rateFor(paths.propertyGrowthRate, year, basePropertyGrowth) / 100;
+    const propertyGrowth = (rateFor(paths.propertyGrowthRate, year, basePropertyGrowth) - newHomeGrowthDrag(propertyInputs, year)) / 100;
     const rentIncrease = rateFor(paths.rentIncreaseRate, year, baseRentIncrease) / 100;
 
     // Variable-rate loan: when the rate changes, the bank re-amortises the remaining

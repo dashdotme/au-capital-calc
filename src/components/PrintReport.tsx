@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import type { BreakEvenResult, MonteCarloResults, ScenarioResults, ScenarioValue, YearlySnapshot } from '../types';
 import { encodeState, type SharedState } from '../utils/shareState';
-import { calculateMortgagePayment, isScenarioValue, resolveScenarioValue, upfrontCostsOf } from '../utils/calculations';
+import { calculateMortgagePayment, isScenarioValue, resolveScenarioValue, upfrontCostsOf, NEW_HOME_DRAG_YEARS, NEW_HOME_GROWTH_DRAG } from '../utils/calculations';
 import { explainGap } from '../utils/gap';
 import { flipDistance, formatMetricValue } from '../utils/flip';
 import { formatAdvantage, formatCompactCurrency, formatCurrency, formatPercent } from '../utils/format';
@@ -126,7 +126,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
     ['Total return', pct(inv.stockMarketReturn)],
     ['Dividend yield / franked', `${inv.dividendYield ?? 0}% / ${inv.frankingLevel ?? 0}%`],
     ['Fund fee / brokerage', `${inv.managementFee ?? 0}% / ${inv.stockTransactionCost}%`],
-    ['Property growth', pct(inv.propertyGrowthRate)],
+    ['Property growth', `${pct(inv.propertyGrowthRate)}${p.newHome ? ` (${NEW_HOME_GROWTH_DRAG} point lower for the first ${NEW_HOME_DRAG_YEARS} years: new home)` : ''}`],
     ['Tax rate (incl. Medicare)', `${inv.marginalTaxRate}%`],
     ['Inflation', `${inv.inflationRate}%`],
     ['Horizon / sell after', `${state.horizon} / ${sellYear} years`],
