@@ -2,7 +2,7 @@ import { useDeferredValue, useMemo, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
 import { runComparison } from '../utils/calculations';
-import { buildSqueezePaths, type SqueezeOptions } from '../utils/squeeze';
+import { HOLD_YEARS, START_UNEMPLOYMENT, buildSqueezePaths, householdJobLossChance, longestSpell, type SqueezeOptions } from '../utils/squeeze';
 import { simulateHousehold, type IncomeSpell } from '../utils/household';
 import { createRng } from '../utils/distributions';
 import { formatAdvantage, formatCompactCurrency, formatCurrency } from '../utils/format';
@@ -20,25 +20,23 @@ interface SqueezeViewProps {
   onIncomeChange: (income: number | null) => void;
 }
 
-const SEVERITIES = [
-  { value: 0.5, label: 'Mild', note: 'real wages −0.5% a year' },
-  { value: 1, label: 'Central', note: 'real wages −1% a year' },
-  { value: 2, label: 'Severe', note: 'real wages −2% a year' },
+const PEAKS = [
+  { value: 6, label: 'Mild', note: 'like the early-2000s slowdown' },
+  { value: 7.5, label: 'Central', note: 'about where it peaked after the GFC and in 2020' },
+  { value: 10, label: 'Severe', note: 'close to the early-1990s recession (11%)' },
 ];
 const JOB_LOSS = [
   { months: 0, label: 'No' },
   { months: 12, label: '1 year' },
   { months: 24, label: '2 years' },
 ];
-const RISKS = [0, 0.03, 0.08, 0.15];
-const SQUEEZE_LENGTH = 9;
 const TAKE_HOME = 0.75;
 const MONTE_CARLO_RUNS = 500;
 
 const advantage = (s: { rentNetPositionAfterTax: number; mortgageNetPositionAfterSale: number }) =>
   s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale;
 
-function Pills<T extends string | number>({ label, value, options, onChange }: {
+function Pills<T extends string | number | boolean>({ label, value, options, onChange }: {
   label: string;
   value: T;
   options: { value: T; label: string }[];
@@ -88,19 +86,19 @@ export default function SqueezeView({
 }: SqueezeViewProps) {
   const { INK, SERIES, axisProps, gridProps, tooltipProps } = useChart();
   const [options, setOptions] = useState<SqueezeOptions>({
-    severity: 1, start: 4, length: SQUEEZE_LENGTH, rateCuts: true, profitShift: true, slump: false,
+    peak: 7.5, start: 3, riseYears: 5, lasting: true, rateCuts: true, profitShift: true,
   });
   const [livingCosts, setLivingCosts] = useState(4500);
   const [jobLossMonths, setJobLossMonths] = useState(0);
-  const [risk, setRisk] = useState(0.08);
+  const [randomSpells, setRandomSpells] = useState(true);
   const grossIncome = income ?? 190000;
   const set = (patch: Partial<SqueezeOptions>) => setOptions({ ...options, ...patch });
 
-  const deferred = useDeferredValue({ options, livingCosts, jobLossMonths, risk, grossIncome });
+  const deferred = useDeferredValue({ options, livingCosts, jobLossMonths, randomSpells, grossIncome });
 
   const model = useMemo(() => {
     const squeeze = buildSqueezePaths(property, rent, investment, horizon, options);
-    const base = buildSqueezePaths(property, rent, investment, horizon, { ...options, severity: 0 });
+    const base = buildSqueezePaths(property, rent, investment, horizon, { ...options, peak: START_UNEMPLOYMENT });
     return {
       squeeze,
       base,
@@ -110,34 +108,34 @@ export default function SqueezeView({
   }, [property, rent, investment, horizon, options]);
 
   const household = useMemo(() => {
-    const { options: o, livingCosts: living, jobLossMonths: months, risk: chance, grossIncome: gross } = deferred;
-    // Job losses come with a falling market, whatever the slump toggle says
-    const paths = buildSqueezePaths(property, rent, investment, horizon, { ...o, slump: true });
+    const { options: o, livingCosts: living, jobLossMonths: months, randomSpells: random, grossIncome: gross } = deferred;
+    const paths = buildSqueezePaths(property, rent, investment, horizon, o);
     const hh = { grossIncome: gross, takeHome: TAKE_HOME, livingCosts: living };
     const spells: IncomeSpell[] = months > 0
       ? [{ startMonth: o.start * 12 + 1, months, incomeShare: 0.5, reskillCost: 15000, scarring: months >= 24 ? 0.15 : 0.075 }]
       : [];
     const result = simulateHousehold(property, rent, investment, horizon, paths, hh, { growth: paths.wages, spells });
 
-    // Random spells: each year there's a `chance` one earner is out for 3-18 months
+    // Random spells: the yearly chance one earner is out of work, and how long for, follow unemployment
     const rng = createRng(7);
     let forced = 0;
-    for (let i = 0; i < MONTE_CARLO_RUNS && chance > 0; i++) {
-      const random: IncomeSpell[] = [];
+    for (let i = 0; i < MONTE_CARLO_RUNS && random; i++) {
+      const spells: IncomeSpell[] = [];
       for (let year = 2; year <= horizon; year++) {
-        if (rng() < chance) {
-          random.push({
+        const u = paths.unemployment[year - 1];
+        if (rng() < householdJobLossChance(u)) {
+          spells.push({
             startMonth: (year - 1) * 12 + 1 + Math.floor(rng() * 12),
-            months: 3 + Math.floor(rng() * 16),
+            months: 3 + Math.floor(rng() * (longestSpell(u) - 2)),
             incomeShare: 0.5 + rng() * 0.1,
             reskillCost: 5000 + rng() * 15000,
             scarring: rng() * 0.15,
           });
         }
       }
-      if (simulateHousehold(property, rent, investment, horizon, paths, hh, { growth: paths.wages, spells: random }).forcedSaleMonth !== null) forced++;
+      if (simulateHousehold(property, rent, investment, horizon, paths, hh, { growth: paths.wages, spells }).forcedSaleMonth !== null) forced++;
     }
-    return { result, forcedChance: chance > 0 ? forced / MONTE_CARLO_RUNS : 0 };
+    return { result, forcedChance: random ? forced / MONTE_CARLO_RUNS : 0 };
   }, [property, rent, investment, horizon, deferred]);
 
   const squeezedGap = advantage(model.squeezed[sellYear]);
@@ -148,17 +146,38 @@ export default function SqueezeView({
 
   const pathData = model.squeeze.interestRate.map((_, i) => ({
     year: i + 1,
+    unemployment: model.squeeze.unemployment[i], unemploymentBase: model.base.unemployment[i],
+    income: model.squeeze.wages[i], incomeBase: model.base.wages[i],
     rate: model.squeeze.interestRate[i], rateBase: model.base.interestRate[i],
     house: model.squeeze.propertyGrowthRate[i], houseBase: model.base.propertyGrowthRate[i],
     rent: model.squeeze.rentIncreaseRate[i], rentBase: model.base.rentIncreaseRate[i],
     returns: model.squeeze.stockMarketReturn[i], returnsBase: model.base.stockMarketReturn[i],
   }));
-  const minis: { key: 'rate' | 'house' | 'rent' | 'returns'; title: string }[] = [
+  const minis: { key: 'unemployment' | 'income' | 'rate' | 'house' | 'rent' | 'returns'; title: string }[] = [
+    { key: 'unemployment', title: 'Unemployment rate' },
+    { key: 'income', title: 'Income growth (wages less jobs lost)' },
     { key: 'rate', title: 'Mortgage rate' },
     { key: 'house', title: 'Home price growth' },
-    { key: 'rent', title: 'Rent growth (≈ wages)' },
+    { key: 'rent', title: 'Rent growth' },
     { key: 'returns', title: 'Investment return' },
   ];
+
+  // How far below the no-squeeze path home values and incomes fall, and when
+  const valueRatios = model.squeezed.map((s, i) => s.mortgagePropertyValue / model.normal[i].mortgagePropertyValue);
+  const topYear = Math.min(horizon, options.start + options.riseYears - 1);
+  // Worst point while unemployment is climbing
+  const climbYears = valueRatios.map((r, year) => ({ r, year })).filter(({ year }) => year >= options.start && year <= topYear);
+  const climbWorst = climbYears.reduce((worst, x) => (x.r < worst.r ? x : worst), { r: 1, year: options.start });
+  const atSale = valueRatios[sellYear];
+  // Largest fall in dollar prices from an earlier high
+  let high = 0;
+  let nominalDip = 0;
+  for (const s of model.squeezed) {
+    high = Math.max(high, s.mortgagePropertyValue);
+    nominalDip = Math.max(nominalDip, 1 - s.mortgagePropertyValue / high);
+  }
+  const incomeIndex = (growth: number[], year: number) => growth.slice(0, year).reduce((x, g) => x * (1 + g / 100), 1);
+  const incomeGap = 1 - incomeIndex(model.squeeze.wages, sellYear) / incomeIndex(model.base.wages, sellYear);
 
   const gapData = model.squeezed.map((s, i) => ({ year: s.year, squeeze: advantage(s), normal: advantage(model.normal[i]) }));
   const gapTicks = niceTicks(Math.min(0, ...gapData.flatMap((d) => [d.squeeze, d.normal])), Math.max(0, ...gapData.flatMap((d) => [d.squeeze, d.normal])));
@@ -170,9 +189,10 @@ export default function SqueezeView({
         <span className="eyebrow">Speculative fiction, with spreadsheets</span>
         <h1 className="m-0 text-4xl leading-none font-bold tracking-tighter sm:text-6xl">The AI squeeze</h1>
         <p className="m-0 max-w-2xl text-lg leading-relaxed text-ink-2">
-          What if AI flattens wages? This is a toy model of that guess, written by an AI, about AI, so season generously
-          with salt. It runs your current scenario through slower wages, the rate cuts that would likely follow, and profits
-          drifting from pay packets to shareholders.
+          What if AI slowly pushes unemployment up? This is a toy model of that guess, written by an AI, about AI, so season
+          generously with salt. It runs your current scenario through rising unemployment and what tends to follow: slower pay
+          rises, fewer people earning, forced sellers, rate cuts that prop prices back up, and profits drifting from pay
+          packets to shareholders.
         </p>
         <p className="m-0 text-sm font-medium text-ink-2">Every number here is an AI-generated estimate. Not financial advice.</p>
       </section>
@@ -180,11 +200,11 @@ export default function SqueezeView({
       <section aria-label="Squeeze settings" className="card grid grid-cols-1 gap-8 px-5 py-6 sm:px-7 md:grid-cols-2">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
-            <span className="text-sm font-semibold">How hard does it bite?</span>
-            <Pills label="Severity" value={options.severity} onChange={(severity) => set({ severity })}
-              options={SEVERITIES.map((s) => ({ value: s.value, label: s.label }))} />
+            <span className="text-sm font-semibold">How high does unemployment go?</span>
+            <Pills label="Peak unemployment" value={options.peak} onChange={(peak) => set({ peak })}
+              options={PEAKS.map((x) => ({ value: x.value, label: `${x.label}, ${x.value}%` }))} />
             <span className="text-xs text-muted">
-              {SEVERITIES.find((s) => s.value === options.severity)?.note}, for {SQUEEZE_LENGTH} years
+              From about {START_UNEMPLOYMENT}% today; {PEAKS.find((x) => x.value === options.peak)?.note}.
             </span>
           </div>
           <label className="flex flex-col gap-2">
@@ -192,14 +212,20 @@ export default function SqueezeView({
             <input type="range" min={1} max={Math.min(10, horizon)} value={options.start}
               onChange={(e) => set({ start: Number(e.target.value) })} className="accent-[var(--color-ink)]" />
           </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-sm font-semibold">Climbs gradually for {options.riseYears} {options.riseYears === 1 ? 'year' : 'years'}</span>
+            <input type="range" min={1} max={10} value={options.riseYears}
+              onChange={(e) => set({ riseYears: Number(e.target.value) })} className="accent-[var(--color-ink)]" />
+            <span className="text-xs text-muted">Then it holds for {HOLD_YEARS} years before easing.</span>
+          </label>
         </div>
         <div className="flex flex-col gap-4">
           <Toggle checked={options.rateCuts} onChange={(rateCuts) => set({ rateCuts })}
             title="The RBA cuts rates" detail="Weak wages and inflation bring cuts, which lift borrowing power and prices." />
           <Toggle checked={options.profitShift} onChange={(profitShift) => set({ profitShift })}
             title="Profits flow to shareholders" detail="What workers lose, company owners gain: global shares do best, Australian banks less so." />
-          <Toggle checked={options.slump} onChange={(slump) => set({ slump })}
-            title="Prices slump when layoffs hit" detail="Prices fall for two years (5% a year per point of lost wage growth) before rate cuts catch up." />
+          <Toggle checked={options.lasting} onChange={(lasting) => set({ lasting })}
+            title="Some jobs don't come back" detail="Unemployment settles half way between today and the peak, instead of recovering fully." />
         </div>
       </section>
 
@@ -214,6 +240,21 @@ export default function SqueezeView({
           things {formatCompactCurrency(Math.abs(shift))} toward {shift > 0 ? 'renting' : 'buying'}. Home values reach{' '}
           {formatCompactCurrency(model.squeezed[sellYear].mortgagePropertyValue)} instead of {formatCompactCurrency(model.normal[sellYear].mortgagePropertyValue)}.
         </p>
+        <ul className="m-0 flex max-w-3xl list-disc flex-col gap-1.5 pl-5 text-[15px] leading-relaxed text-ink-2">
+          <li>
+            {climbWorst.r < 0.995
+              ? <>While unemployment climbs, home values fall up to {Math.round((1 - climbWorst.r) * 100)}% behind where they'd otherwise be (year {climbWorst.year}).</>
+              : <>While unemployment climbs, rate cuts keep home values on track.</>}
+            {nominalDip >= 0.005 && <> In dollars, prices drop {Math.round(nominalDip * 100)}% from their high.</>}
+            {' '}By year {sellYear} they're {Math.abs(Math.round((1 - atSale) * 100))}% {atSale <= 1 ? 'below' : 'above'} the no-squeeze path
+            {options.rateCuts && atSale < climbWorst.r ? ', as rates rise back to normal on lower incomes.' : '.'}
+          </li>
+          <li>
+            Household income from work ends up {Math.abs(Math.round(incomeGap * 100))}% {incomeGap >= 0 ? 'lower' : 'higher'} by year {sellYear}: slower
+            pay rises, and fewer people in work.
+          </li>
+          {!options.rateCuts && <li>Without rate cuts nothing props prices up, so they track incomes down.</li>}
+        </ul>
         <label className="flex max-w-md items-center gap-3 text-sm text-muted">
           Sell after
           <input type="range" min={1} max={horizon} value={sellYear} onChange={(e) => onSellYearChange(Number(e.target.value))}
@@ -230,7 +271,7 @@ export default function SqueezeView({
             <span className="flex items-center gap-2"><svg width="22" height="4" aria-hidden><line x1="0" x2="22" y1="2" y2="2" stroke={INK.muted} strokeWidth="1.5" strokeDasharray="4 3" /></svg>Without</span>
           </span>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {minis.map((mini) => (
             <div key={mini.key} className="card flex flex-col gap-2 px-4 pt-4 pb-2">
               <span className="text-sm font-semibold">{mini.title}</span>
@@ -265,7 +306,7 @@ export default function SqueezeView({
               <YAxis {...axisProps} width={60} domain={[gapTicks[0], gapTicks[gapTicks.length - 1]]} ticks={gapTicks}
                 tickFormatter={(v: number) => (v === 0 ? 'Even' : formatCompactCurrency(v))} />
               <ReferenceLine y={0} stroke={INK.muted} />
-              <ReferenceArea x1={options.start} x2={Math.min(horizon, options.start + SQUEEZE_LENGTH)} fill={INK.primary} fillOpacity={0.05}
+              <ReferenceArea x1={options.start} x2={Math.min(horizon, options.start + options.riseYears - 1 + HOLD_YEARS)} fill={INK.primary} fillOpacity={0.05}
                 label={{ value: 'Squeeze', position: 'insideTop', fill: INK.muted, fontSize: 12 }} />
               <Tooltip {...tooltipProps} labelFormatter={(y) => `Sell in year ${y}`} formatter={(v: number, name: string) => [formatAdvantage(v), name]} />
               <Line dataKey="normal" name="Without" stroke={INK.muted} strokeWidth={1.5} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
@@ -279,9 +320,9 @@ export default function SqueezeView({
         <div className="flex flex-col gap-1">
           <h2 className="m-0 text-xl font-semibold">Now add your own job to the mix</h2>
           <p className="m-0 text-[15px] text-ink-2">
-            Here each household lives on its income. Job losses come with a falling market: prices drop for the first two
-            years of the squeeze. If the buyer can't cover the mortgage for three months they're forced to sell, at no more
-            than the home was worth two years earlier and 5% under that, then rent instead.
+            Here each household lives on its income, and its pay follows the economy above. If the buyer can't cover the
+            mortgage for three months they're forced to sell, at no more than the home was worth two years earlier and 5%
+            under that, then rent instead.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -300,9 +341,9 @@ export default function SqueezeView({
               options={JOB_LOSS.map((j) => ({ value: j.months, label: j.label }))} />
           </div>
           <div className="flex flex-col gap-2">
-            <span className="text-sm text-ink-2">Chance of a spell out of work, each year</span>
-            <Pills label="Job loss risk" value={risk} onChange={setRisk}
-              options={RISKS.map((r) => ({ value: r, label: `${r * 100}%` }))} />
+            <span className="text-sm text-ink-2">Random spells out of work, as unemployment rises</span>
+            <Pills label="Random job loss" value={randomSpells} onChange={setRandomSpells}
+              options={[{ value: true, label: 'On' }, { value: false, label: 'Off' }]} />
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4 border-t border-line pt-5 sm:grid-cols-3">
@@ -322,8 +363,10 @@ export default function SqueezeView({
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-sm text-ink-2">Chance of a forced sale</span>
-            <span className="font-mono text-xl">{risk > 0 ? `${Math.round(household.forcedChance * 100)}%` : '–'}</span>
-            <span className="text-xs text-muted">{risk > 0 ? `${MONTE_CARLO_RUNS} runs with random spells of 3-18 months` : 'Pick a job-loss risk'}</span>
+            <span className="font-mono text-xl">{randomSpells ? `${Math.round(household.forcedChance * 100)}%` : '–'}</span>
+            <span className="text-xs text-muted">{randomSpells
+                ? `${MONTE_CARLO_RUNS} runs. Each year a ${Math.round(householdJobLossChance(START_UNEMPLOYMENT) * 100)}% chance one of you is out of work, rising to ${Math.round(householdJobLossChance(options.peak) * 100)}% at the peak`
+                : 'Turn on random spells'}</span>
           </div>
         </div>
       </section>
@@ -334,15 +377,27 @@ export default function SqueezeView({
         </summary>
         <div className="mt-3 flex flex-col gap-3 text-sm leading-relaxed text-ink-2">
           <p className="m-0">
-            Starting from your inputs, wage growth is assumed to match your rent growth. During the squeeze real wages fall
-            by the chosen amount for {SQUEEZE_LENGTH} years and a quarter of that lingers. Rents follow wages. The cash rate is cut
-            1.5 points per point of lost wage growth, phased in over two years, and mortgage rates follow. Home prices follow
-            borrowing capacity: wage growth, plus a supply term, plus the boost from lower rates. With profits shifting to
-            shareholders, returns rise per point of lost wage growth: +1.5 for global shares, +2 for US, −0.5 for Australian.
+            Unemployment climbs evenly from {START_UNEMPLOYMENT}% to the peak, holds for {HOLD_YEARS} years, then eases back,
+            fully or half way. What drives everything is the gap between unemployment and the rate the economy has got used to,
+            which drifts toward the actual rate over time, so a lasting rise stops pressing on wages and interest rates
+            eventually but leaves fewer people in work for good.
           </p>
           <p className="m-0">
-            Not modelled: tax brackets (take-home pay is a flat {TAKE_HOME * 100}%), government support, buying again after a forced
-            sale, or how many people a squeeze puts out of work. The profit shift and slump sizes are guesses, not research.
+            Wage growth, taken to match your rent growth, falls 0.6 points per point of that gap (a rough Australian wage
+            Phillips curve). Income from work also shrinks as people lose jobs. The cash rate is cut 1.5 points per point of
+            gap, moving half way each year, and mortgage rates follow. Home prices track income growth, a supply term, and
+            borrowing power from rate cuts, which reaches prices a quarter at a time. While unemployment is rising, forced
+            sales and caution take 5% off prices per point of rise, and half of that comes back afterwards. Rents follow
+            wages, less a point per point of rise as people move in together.
+          </p>
+          <p className="m-0">
+            For comparison: unemployment hit 11% in the early 1990s with rates cut from 17% to under 5%, and prices barely
+            moved in dollars. Around the GFC prices dipped about 4% and then jumped on rate cuts and grants.
+          </p>
+          <p className="m-0">
+            Not modelled: tax brackets (take-home pay is a flat {TAKE_HOME * 100}%), government support, banks tightening
+            lending beyond the slow pass-through, or buying again after a forced sale.
+            The sizes are rough guesses, not estimates from research.
           </p>
         </div>
       </details>

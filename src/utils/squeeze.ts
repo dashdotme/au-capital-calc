@@ -1,44 +1,72 @@
-// "AI income squeeze" scenario: year-by-year paths for mortgage rates, house prices, rents
-// and investment returns, derived from a fall in real wage growth. Baselines come from the
-// user's own inputs, so with no squeeze the paths reproduce the normal calculation.
+// "AI squeeze" scenario: unemployment rises gradually as AI displaces work, and year-by-year
+// paths for wages, mortgage rates, house prices, rents and investment returns follow from it.
+// Baselines come from the user's own inputs, so with no rise in unemployment the paths
+// reproduce the normal calculation.
 //
 // The chain:
-// - Wages: baseline wage growth is taken to equal baseline rent growth (rents track incomes).
-//   During the squeeze real wages fall by `severity` points a year, inflation dips by half
-//   that, and a quarter of the hit lingers afterwards.
-// - Rates: mortgage rate = cash rate + a fixed margin. The cash rate is cut 1.5 points per
-//   point of wage hit (if rate cuts are on), phased in over two years, half-normalising later.
-// - House prices: wage growth + a constant supply/population term + the change in borrowing
-//   capacity from the rate change. With the layoff slump on, prices instead fall outright for
-//   the first two squeeze years (distressed selling), and the rate-cut boost only arrives after.
-// - Rents: follow wages.
-// - Investments: profits shift from wages to companies, lifting share returns by portfolio.
+// - Unemployment: climbs evenly from today's rate to the peak over `riseYears`, holds for
+//   `HOLD_YEARS`, then recovers over `RECOVERY_YEARS`, all the way or (if jobs don't come back)
+//   only half way.
+// - Slack: the gap between unemployment and the rate the economy has adjusted to. That
+//   "normal" rate drifts toward actual unemployment (hysteresis), so a lasting rise stops
+//   pressing on wages and rates after a while but leaves employment lower for good.
+// - Wages: Phillips curve, nominal wage growth falls `PHILLIPS` points per point of slack.
+//   Baseline wage growth is taken to equal baseline rent growth (rents track incomes).
+// - Household income (what buyers bid with): wage growth, less the share of people losing work.
+// - Rates: mortgage rate = cash rate + a fixed margin. The cash rate is cut `RATE_RESPONSE`
+//   points per point of slack (if rate cuts are on), moving half way to target each year.
+// - House prices: household income growth + a constant supply/population term + borrowing
+//   capacity from rate changes, which reaches prices over a few years (`CAPACITY_PASS_THROUGH`)
+//   as lenders stay cautious, less forced selling and caution while unemployment is rising
+//   (half of which unwinds once it stops rising).
+// - Rents: follow wages, less weaker household formation while unemployment rises.
+// - Investments: profits shift from wages to companies, by portfolio.
 import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
 import { calculateMortgagePayment, resolveScenarioValue, type RatePaths } from './calculations';
 
 export interface SqueezeOptions {
-  /** Points of real wage growth lost each year during the squeeze (0.5 mild, 1 central, 2 severe) */
-  severity: number;
-  /** Year the squeeze starts */
+  /** Unemployment rate at the top (%); the starting rate means no squeeze */
+  peak: number;
+  /** Year unemployment starts rising */
   start: number;
-  /** How many years it lasts */
-  length: number;
+  /** Years it takes to reach the peak */
+  riseYears: number;
+  /** Jobs come back only half way: unemployment settles between the start and the peak */
+  lasting: boolean;
   rateCuts: boolean;
   profitShift: boolean;
-  slump: boolean;
 }
 
-export type SqueezePaths = Required<RatePaths> & { wages: number[] };
+export type SqueezePaths = Required<RatePaths> & {
+  /** Nominal growth in household income from work (wage growth less jobs lost), % */
+  wages: number[];
+  /** Unemployment rate, % */
+  unemployment: number[];
+};
 
+/** Unemployment today, roughly (ABS Labour Force, 2026) */
+export const START_UNEMPLOYMENT = 4.5;
+export const HOLD_YEARS = 3;
+export const RECOVERY_YEARS = 5;
 /** Assumed gap between the RBA cash rate and owner-occupier variable rates */
 export const MORTGAGE_MARGIN = 2.15;
-const CASH_FLOOR = 0.25;
+const CASH_FLOOR = 0.1;
+/** Cash rate cut per point of slack */
 const RATE_RESPONSE = 1.5;
-/** Price fall per year, per point of lost wage growth, while layoffs bite */
-const SLUMP_PER_POINT = 5;
-const SLUMP_YEARS = 2;
+/** Nominal wage growth lost per point of slack */
+export const PHILLIPS = 0.6;
+/** Share of the gap the economy's "normal" unemployment closes each year */
+const HYSTERESIS = 0.1;
+/** Price fall per point unemployment rises in a year: forced sales, caution, tighter lending */
+export const DISTRESS = 5;
+/** Rent growth lost per point unemployment rises in a year: people move in together */
+const HOUSEHOLD_FORMATION = 1;
+/** Share of the distress fall that is panic and unwinds once unemployment stops rising */
+const DISTRESS_REBOUND = 0.5;
+/** Share of the accumulated borrowing-capacity change that reaches prices each year */
+const CAPACITY_PASS_THROUGH = 0.25;
 
-/** Extra annual return per point of wage hit, by portfolio (profits flowing to shareholders) */
+/** Extra annual return per point of lost wage growth, by portfolio (profits flowing to shareholders) */
 export const PROFIT_SHIFT: Record<string, number> = {
   global: 1.5,
   us: 2.0,
@@ -51,6 +79,22 @@ export const PROFIT_SHIFT: Record<string, number> = {
 /** Borrowing capacity per dollar of monthly repayment on a 30-year loan. */
 const capacity = (mortgageRate: number) => 1 / calculateMortgagePayment(1, mortgageRate, 30);
 
+/** Unemployment rate in each year (index 0 = year 1). */
+export function unemploymentPath(options: Pick<SqueezeOptions, 'peak' | 'start' | 'riseYears' | 'lasting'>, years: number): number[] {
+  const rise = Math.max(0, options.peak - START_UNEMPLOYMENT);
+  const settled = START_UNEMPLOYMENT + (options.lasting ? rise / 2 : 0);
+  const riseYears = Math.max(1, options.riseYears);
+  const top = options.start + riseYears - 1;
+  return Array.from({ length: years }, (_, i) => {
+    const year = i + 1;
+    if (year < options.start) return START_UNEMPLOYMENT;
+    if (year <= top) return START_UNEMPLOYMENT + (rise * (year - options.start + 1)) / riseYears;
+    if (year <= top + HOLD_YEARS) return START_UNEMPLOYMENT + rise;
+    const recovered = Math.min(1, (year - top - HOLD_YEARS) / RECOVERY_YEARS);
+    return START_UNEMPLOYMENT + rise + (settled - START_UNEMPLOYMENT - rise) * recovered;
+  });
+}
+
 export function buildSqueezePaths(
   property: PropertyInputs,
   rent: RentInputs,
@@ -62,51 +106,61 @@ export function buildSqueezePaths(
   const baseWages = resolveScenarioValue(rent.rentIncreaseRate, 'baseline');
   const baseGrowth = resolveScenarioValue(investment.propertyGrowthRate, 'baseline');
   const baseReturn = resolveScenarioValue(investment.stockMarketReturn, 'baseline');
-  const inflation = investment.inflationRate;
-  const realWages = baseWages - inflation;
   const supply = baseGrowth - baseWages;
   const neutralCash = baseRate - MORTGAGE_MARGIN;
-  const boost = options.profitShift ? (PROFIT_SHIFT[investment.portfolio ?? ''] ?? 0.8) : 0;
+  const shift = options.profitShift ? (PROFIT_SHIFT[investment.portfolio ?? ''] ?? 0.8) : 0;
   const rateResponse = options.rateCuts ? RATE_RESPONSE : 0;
+  const unemployment = unemploymentPath(options, years);
 
-  const paths: SqueezePaths = { interestRate: [], stockMarketReturn: [], propertyGrowthRate: [], rentIncreaseRate: [], wages: [] };
+  const paths: SqueezePaths = {
+    interestRate: [], stockMarketReturn: [], propertyGrowthRate: [], rentIncreaseRate: [], wages: [], unemployment,
+  };
   let previousRate = baseRate;
-  let deferredBoost = 0;
-  let releasesLeft = 0;
+  let previousUnemployment = START_UNEMPLOYMENT;
+  let normalUnemployment = START_UNEMPLOYMENT;
+  let pendingCapacity = 0;
+  let pendingRebound = 0;
   for (let year = 1; year <= years; year++) {
-    const during = year >= options.start && year < options.start + options.length;
-    const after = year >= options.start + options.length;
-    const hit = during ? -options.severity : 0;
-    const wages = inflation + hit * 0.5 + realWages + hit + (after ? -options.severity * 0.25 : 0);
+    const u = unemployment[year - 1];
+    const rising = Math.max(0, u - previousUnemployment);
+    const slack = Math.max(0, u - normalUnemployment);
 
-    const cashShift = during ? hit : after ? -options.severity * 0.5 : 0;
-    const targetCash = Math.max(Math.min(CASH_FLOOR, neutralCash), neutralCash + cashShift * rateResponse);
+    const wageGrowth = baseWages - PHILLIPS * slack;
+    // Income from work grows with wages and shrinks with the share of people out of work
+    const incomeGrowth = wageGrowth - (100 * (u - previousUnemployment)) / (100 - previousUnemployment);
+
+    const targetCash = Math.max(Math.min(CASH_FLOOR, neutralCash), neutralCash - slack * rateResponse);
     const previousCash = previousRate - MORTGAGE_MARGIN;
     const rate = previousCash + (targetCash - previousCash) * 0.5 + MORTGAGE_MARGIN;
 
-    let capacityChange = 100 * Math.log(capacity(rate) / capacity(previousRate));
-    const slumping = options.slump && options.severity > 0 && year >= options.start && year < options.start + SLUMP_YEARS;
-    let houseGrowth: number;
-    if (slumping) {
-      // Distressed selling: prices fall outright; the rate-cut boost waits until it's over
-      deferredBoost += capacityChange;
-      releasesLeft = 2;
-      houseGrowth = -SLUMP_PER_POINT * options.severity;
-    } else {
-      if (releasesLeft > 0) {
-        capacityChange += deferredBoost / releasesLeft;
-        deferredBoost -= deferredBoost / releasesLeft;
-        releasesLeft--;
-      }
-      houseGrowth = wages + supply + capacityChange;
-    }
+    pendingCapacity += 100 * Math.log(capacity(rate) / capacity(previousRate));
+    const capacityEffect = pendingCapacity * CAPACITY_PASS_THROUGH;
+    pendingCapacity -= capacityEffect;
+    const distress = DISTRESS * rising;
+    pendingRebound += distress * DISTRESS_REBOUND;
+    // The panic part comes back gradually once unemployment has stopped rising
+    const rebound = rising > 0 ? 0 : pendingRebound * CAPACITY_PASS_THROUGH;
+    pendingRebound -= rebound;
+    const houseGrowth = incomeGrowth + supply + capacityEffect - distress + rebound;
 
     paths.interestRate.push(rate);
     paths.propertyGrowthRate.push(houseGrowth);
-    paths.rentIncreaseRate.push(wages);
-    paths.stockMarketReturn.push(baseReturn + boost * -hit);
-    paths.wages.push(wages);
+    paths.rentIncreaseRate.push(wageGrowth - HOUSEHOLD_FORMATION * rising);
+    paths.stockMarketReturn.push(baseReturn + shift * PHILLIPS * slack);
+    paths.wages.push(incomeGrowth);
+
     previousRate = rate;
+    previousUnemployment = u;
+    normalUnemployment += (u - normalUnemployment) * HYSTERESIS;
   }
   return paths;
 }
+
+/**
+ * Chance (0–1) that a two-earner household has someone out of work in a year, at this
+ * unemployment rate: about one and a half times the rate, as most spells are new each year.
+ */
+export const householdJobLossChance = (unemployment: number) => Math.min(0.5, (1.5 * unemployment) / 100);
+
+/** Longest spell out of work (months) at this unemployment rate; spells lengthen in a weak market. */
+export const longestSpell = (unemployment: number) => Math.round(6 + 2 * unemployment);

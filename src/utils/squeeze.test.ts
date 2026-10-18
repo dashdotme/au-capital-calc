@@ -1,41 +1,55 @@
 import { describe, expect, it } from 'vitest';
 import { runComparison } from './calculations';
-import { buildSqueezePaths, type SqueezeOptions } from './squeeze';
+import { START_UNEMPLOYMENT, buildSqueezePaths, unemploymentPath, type SqueezeOptions } from './squeeze';
 import { simulateHousehold } from './household';
 import { DEFAULT_INVESTMENT, DEFAULT_PROPERTY, DEFAULT_RENT } from '../defaults';
 
 const P = DEFAULT_PROPERTY;
 const R = DEFAULT_RENT;
 const I = DEFAULT_INVESTMENT;
-const central: SqueezeOptions = { severity: 1, start: 4, length: 9, rateCuts: true, profitShift: true, slump: false };
+const central: SqueezeOptions = { peak: 7.5, start: 3, riseYears: 5, lasting: true, rateCuts: true, profitShift: true };
 const gapAt = (results: ReturnType<typeof runComparison>, year: number) =>
   results[year].rentNetPositionAfterTax - results[year].mortgageNetPositionAfterSale;
+const valueAt = (options: SqueezeOptions, year: number) =>
+  runComparison(P, R, I, 30, buildSqueezePaths(P, R, I, 30, options))[year].mortgagePropertyValue;
 
 describe('AI squeeze paths', () => {
-  it('reproduces the normal calculation when there is no squeeze', () => {
-    const paths = buildSqueezePaths(P, R, I, 30, { ...central, severity: 0 });
+  it('reproduces the normal calculation when unemployment stays put', () => {
+    const paths = buildSqueezePaths(P, R, I, 30, { ...central, peak: START_UNEMPLOYMENT });
     const withPaths = runComparison(P, R, I, 30, paths);
     const plain = runComparison(P, R, I, 30);
     expect(gapAt(withPaths, 30)).toBeCloseTo(gapAt(plain, 30), 0);
   });
 
-  it('cuts rates and slows rents during the squeeze', () => {
+  it('raises unemployment gradually, then eases half way when jobs do not come back', () => {
+    const u = unemploymentPath(central, 30);
+    expect(u[1]).toBe(START_UNEMPLOYMENT);
+    expect(u[3]).toBeGreaterThan(u[2]);
+    expect(u[7]).toBeCloseTo(7.5);
+    expect(u[29]).toBeCloseTo((START_UNEMPLOYMENT + 7.5) / 2);
+    expect(unemploymentPath({ ...central, lasting: false }, 30)[29]).toBeCloseTo(START_UNEMPLOYMENT);
+  });
+
+  it('slows income growth, cuts rates and slows rents while unemployment rises', () => {
     const paths = buildSqueezePaths(P, R, I, 30, central);
-    expect(paths.interestRate[8]).toBeLessThan(paths.interestRate[0]);
-    expect(paths.rentIncreaseRate[8]).toBeLessThan(paths.rentIncreaseRate[0]);
+    expect(paths.wages[4]).toBeLessThan(paths.wages[0]);
+    expect(paths.interestRate[6]).toBeLessThan(paths.interestRate[0]);
+    expect(paths.rentIncreaseRate[4]).toBeLessThan(paths.rentIncreaseRate[0]);
   });
 
-  it('a layoff slump means falling prices, not slower growth', () => {
-    const paths = buildSqueezePaths(P, R, I, 30, { ...central, slump: true });
-    expect(paths.propertyGrowthRate[3]).toBeLessThan(0);
-    expect(paths.propertyGrowthRate[4]).toBeLessThan(0);
+  it('pushes prices below the no-squeeze path while unemployment is rising', () => {
+    const none = { ...central, peak: START_UNEMPLOYMENT };
+    expect(valueAt(central, 5)).toBeLessThan(valueAt(none, 5));
   });
 
-  it('a layoff slump lowers house prices', () => {
-    const severe = { ...central, severity: 2 };
-    const noSlump = runComparison(P, R, I, 30, buildSqueezePaths(P, R, I, 30, severe));
-    const slump = runComparison(P, R, I, 30, buildSqueezePaths(P, R, I, 30, { ...severe, slump: true }));
-    expect(slump[6].mortgagePropertyValue).toBeLessThan(noSlump[6].mortgagePropertyValue);
+  it('hurts prices more when the RBA does not cut', () => {
+    expect(valueAt({ ...central, rateCuts: false }, 8)).toBeLessThan(valueAt(central, 8));
+  });
+
+  it('gives back the panic part of the fall once unemployment stops rising', () => {
+    const paths = buildSqueezePaths(P, R, I, 30, { ...central, rateCuts: false });
+    // Year 8 is the first year unemployment stops rising
+    expect(paths.propertyGrowthRate[7]).toBeGreaterThan(paths.wages[7]);
   });
 });
 
