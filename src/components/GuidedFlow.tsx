@@ -4,6 +4,7 @@ import { CITIES, applyCity } from '../cities';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
 import { calculateMortgagePayment, resolveScenarioValue, runComparison } from '../utils/calculations';
 import { formatCurrency } from '../utils/format';
+import { withStampDuty } from '../utils/stampDuty';
 import { AdornedInput } from './InputField';
 
 interface GuidedFlowProps {
@@ -36,7 +37,8 @@ function Choice({ selected, onClick, children }: { selected: boolean; onClick: (
 /** A short first-visit questionnaire that fills in the main inputs. */
 export default function GuidedFlow({ property, rent, investment, horizon, onApply, onClose }: GuidedFlowProps) {
   const [step, setStep] = useState(0);
-  const [p, setP] = useState(property);
+  const [p, setRawP] = useState(property);
+  const setP = (next: PropertyInputs) => setRawP(withStampDuty(next));
   const [r, setR] = useState(rent);
   const [inv, setInv] = useState(investment);
   const [stay, setStay] = useState(Math.min(horizon, 30));

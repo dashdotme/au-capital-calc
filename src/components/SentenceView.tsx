@@ -13,6 +13,7 @@ import {
 import type { BreakEvenResult, InvestmentInputs, PropertyInputs, RentInputs, ScenarioResults, YearlySnapshot } from '../types';
 import type { GapDriver } from '../utils/gap';
 import { CITIES, applyCity } from '../cities';
+import { calculateStampDuty, stampDutyBasis } from '../utils/stampDuty';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
 import { formatAdvantage, formatCompactCurrency, formatCurrency } from '../utils/format';
 import { PORTFOLIO_PHRASES, describeFlip, describeTiming, whyCards, winnerAt } from '../utils/narrative';
@@ -107,6 +108,7 @@ export default function SentenceView({
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const city = CITIES.find((c) => c.id === p.location);
+  const dutyState = p.state;
   const final = baseline[sellYear];
   const winner = winnerAt(final);
   const gap = Math.abs(advantage(final));
@@ -132,6 +134,7 @@ export default function SentenceView({
             <AdornedInput ariaLabel="Purchase price" format="currency" value={p.propertyPrice}
               onChange={(propertyPrice) => setProperty({ propertyPrice })} />
             {city && <span className="text-xs text-muted">{city.name} median: {formatCurrency(city.price)}</span>}
+            <span className="text-xs text-muted">Stamp duty {formatCurrency(p.stampDuty)}. {stampDutyBasis(p.state, p.firstHomeBuyer ?? false)}</span>
           </span>
         )}
       </SentencePill>{' '}
@@ -149,6 +152,25 @@ export default function SentenceView({
           />
         )}
       </SentencePill>{' '}
+      {dutyState && (
+        <>
+          <SentencePill label={p.firstHomeBuyer ? 'as a first home buyer' : 'having owned before'} title="Buyer">
+            {(close) => (
+              <ChoiceList
+                value={p.firstHomeBuyer ? 'first' : 'owned'}
+                options={[
+                  { value: 'first', label: 'First home buyer', detail: `${formatCompactCurrency(calculateStampDuty(dutyState, p.propertyPrice, true))} duty` },
+                  { value: 'owned', label: 'Owned before', detail: `${formatCompactCurrency(calculateStampDuty(dutyState, p.propertyPrice, false))} duty` },
+                ]}
+                onPick={(choice) => {
+                  onPropertyAndRentChange({ ...p, firstHomeBuyer: choice === 'first' }, r);
+                  close();
+                }}
+              />
+            )}
+          </SentencePill>{' '}
+        </>
+      )}
       with{' '}
       <SentencePill label={formatCurrency(p.deposit)} title="Deposit">
         {() => (

@@ -1,4 +1,5 @@
 import type { InvestmentInputs, PropertyInputs, RentInputs, ScenarioValue } from '../types';
+import { isAuState } from './stampDuty';
 
 /** Everything needed to reproduce a view. Lives in the URL hash, which never leaves the browser. */
 export interface SharedState {
@@ -64,6 +65,8 @@ export function decodeState(hash: string, defaults: SharedState): SharedState | 
       property: {
         ...mergeTyped(defaults.property, raw.property),
         location: typeof raw.property?.location === 'string' ? raw.property.location : undefined,
+        // No state (including links made before stamp duty was calculated) keeps the shared figure
+        state: isAuState(raw.property?.state) ? raw.property.state : undefined,
       },
       rent: mergeTyped(defaults.rent, raw.rent),
       investment: {

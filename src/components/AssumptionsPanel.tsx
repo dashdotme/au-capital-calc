@@ -6,6 +6,7 @@ import { isScenarioValue } from '../utils/calculations';
 import InputField, { AdornedInput } from './InputField';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
 import { CITIES, applyCity } from '../cities';
+import { AU_STATES, isAuState, stampDutyBasis } from '../utils/stampDuty';
 import MultiInput from './MultiInput';
 
 interface AssumptionsPanelProps {
@@ -142,7 +143,7 @@ export default function AssumptionsPanel({
             <option value="custom" disabled={p.location !== undefined}>Custom</option>
           </select>
           <span className="text-xs leading-snug text-muted">
-            Fills median price (Sep 2026), 20% deposit, stamp duty, rent, rates and insurance.
+            Fills median price (Sep 2026), 20% deposit, state, rent, rates and insurance.
           </span>
         </label>
         <InputField label="Purchase price" format="currency" value={p.propertyPrice}
@@ -165,11 +166,38 @@ export default function AssumptionsPanel({
             helpText="Added to the loan. First home buyer schemes can waive it." />
         )}
         <Pair>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[13px] text-ink-2">Stamp duty rules</span>
+            <select
+              className="input-field"
+              value={p.state ?? 'manual'}
+              onChange={(e) => {
+                const state = isAuState(e.target.value) ? e.target.value : undefined;
+                onCityProperty({ state });
+              }}
+            >
+              {AU_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+              <option value="manual">Enter manually</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[13px] text-ink-2">Buyer</span>
+            <select
+              className="input-field"
+              value={p.firstHomeBuyer ? 'first' : 'owned'}
+              onChange={(e) => onPropertyChange({ ...p, firstHomeBuyer: e.target.value === 'first' })}
+            >
+              <option value="first">First home buyer</option>
+              <option value="owned">Owned before</option>
+            </select>
+          </label>
+        </Pair>
+        <Pair>
           <InputField label="Stamp duty" format="currency" value={p.stampDuty}
-            onChange={(stampDuty) => onCityProperty({ stampDuty })}
-            helpText={city
-              ? `${city.state === 'avg' ? 'Average across states' : `${city.state} owner-occupier rate`} at the median. First home buyers may pay less.`
-              : 'Varies by state; first home buyers may pay less.'} />
+            onChange={(stampDuty) => onCityProperty({ stampDuty, state: undefined })}
+            helpText={city?.state === 'avg' && !p.state
+              ? 'Average across states at the median. Pick a state to calculate it from the price.'
+              : stampDutyBasis(p.state, p.firstHomeBuyer ?? false)} />
           <InputField label="Other costs" format="currency" value={p.otherPurchaseCosts}
             onChange={(otherPurchaseCosts) => onPropertyChange({ ...p, otherPurchaseCosts })} />
         </Pair>

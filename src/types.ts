@@ -4,12 +4,18 @@ export interface ScenarioValue {
   optimistic: number;
 }
 
+import type { AuState } from './utils/stampDuty';
+
 export interface PropertyInputs {
   propertyPrice: number;
   deposit: number;
   loanTerm: number;
   interestRate: number | ScenarioValue;
+  /** Calculated from price, state and buyer type when `state` is set; otherwise entered by hand */
   stampDuty: number;
+  /** State whose stamp duty rules apply; unset means the stamp duty figure is manual */
+  state?: AuState;
+  firstHomeBuyer?: boolean;
   otherPurchaseCosts: number;
   maintenanceRate: number;
   councilRates: number;

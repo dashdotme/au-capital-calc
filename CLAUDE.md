@@ -45,6 +45,7 @@ The application follows a unidirectional data flow:
 - **Franking credits**: grossed up at the 30% company rate; excess credits are refunded
 - **CGT discount**: 50% applied to property (cost base includes purchase and selling costs) and stocks
 - **Marginal tax rate**: stage 3 brackets including the 2% Medicare levy
+- **Stamp duty**: `utils/stampDuty.ts` holds 2026–27 owner-occupier schedules and first home buyer relief per state (established homes). When `PropertyInputs.state` is set, `withStampDuty()` recalculates it on every input update; no state means a manual figure
 
 ### Component Structure
 

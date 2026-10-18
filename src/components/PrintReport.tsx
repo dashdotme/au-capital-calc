@@ -110,7 +110,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
     ['Interest rate', pct(p.interestRate)],
     ['Loan term', `${p.loanTerm} years`],
     ['Offset balance', formatCurrency(p.offsetAccountBalance ?? 0)],
-    ['Stamp duty', formatCurrency(p.stampDuty)],
+    ['Stamp duty', `${formatCurrency(p.stampDuty)} (${p.state ? `${p.state}, ${p.firstHomeBuyer ? 'first home buyer' : 'owned before'}` : 'entered manually'})`],
     ['Other purchase costs', formatCurrency(p.otherPurchaseCosts)],
     ['Maintenance', `${p.maintenanceRate}% of value / yr`],
     ['Council & water', `${formatCurrency(p.councilRates)} / yr`],
