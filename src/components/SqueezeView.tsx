@@ -188,15 +188,15 @@ export default function SqueezeView({
   return (
     <main className="mx-auto flex max-w-[1080px] flex-col gap-12 px-4 pt-8 pb-12 sm:px-6 sm:pt-12">
       <section aria-label="About this view" className="flex flex-col gap-3">
-        <span className="eyebrow">Speculative fiction, with spreadsheets</span>
+        <span className="eyebrow">Wildly speculative, written by an AI</span>
         <h1 className="m-0 text-4xl leading-none font-bold tracking-tighter sm:text-6xl">The AI squeeze</h1>
         <p className="m-0 max-w-2xl text-lg leading-relaxed text-ink-2">
-          What if AI slowly pushes unemployment up? This is a toy model of that guess, written by an AI, about AI, so season
-          generously with salt. It runs your current scenario through rising unemployment and what tends to follow: slower pay
+          What if AI slowly pushes unemployment up? This page is an AI guessing at what AI might do to the economy. The real
+          outcome is impossible to forecast, so read it as speculation, not a prediction. It runs your current scenario through rising unemployment and what tends to follow: slower pay
           rises, fewer people earning, forced sellers, falling share prices, rate cuts that prop prices back up, and
           profits drifting from pay packets to shareholders.
         </p>
-        <p className="m-0 text-sm font-medium text-ink-2">Every number here is an AI-generated estimate. Not financial advice.</p>
+        <p className="m-0 text-sm font-medium text-ink-2">Every number here is an AI's guess. Not financial advice.</p>
       </section>
 
       <section aria-label="Squeeze settings" className="card grid grid-cols-1 gap-8 px-5 py-6 sm:px-7 md:grid-cols-2">
@@ -381,9 +381,16 @@ export default function SqueezeView({
 
       <details className="group rounded-2xl border border-line bg-surface px-5 py-4 sm:px-7">
         <summary className="cursor-pointer list-none text-[15px] font-semibold [&::-webkit-details-marker]:hidden">
-          How this toy works (and what it gets wrong)
+          How this works (and why you shouldn't rely on it)
         </summary>
         <div className="mt-3 flex flex-col gap-3 text-sm leading-relaxed text-ink-2">
+          <p className="m-0 font-medium text-ink">
+            This is wildly speculative guessing by an AI. What AI will actually do to jobs, wages, interest rates and asset
+            prices is impossible to forecast: nothing like it has happened before, so there's no data to learn from and no
+            way to check the answer. Every number below is an AI's guess, picked to sound plausible and chained together.
+            Treat the results as speculation, never a forecast.
+          </p>
+          <p className="m-0">Here's how the guesses fit together.</p>
           <p className="m-0">
             Unemployment climbs evenly from {START_UNEMPLOYMENT}% to the peak, holds for {HOLD_YEARS} years, then eases back,
             fully or half way. What drives everything is the gap between unemployment and the rate the economy has got used to,
@@ -400,13 +407,13 @@ export default function SqueezeView({
             balanced funds, not at all for cash), and 60% of that comes back once unemployment stops rising.
           </p>
           <p className="m-0">
-            For comparison: unemployment hit 11% in the early 1990s with rates cut from 17% to under 5%, and prices barely
+            Past downturns were nothing like this, but for a sense of scale: unemployment hit 11% in the early 1990s with rates cut from 17% to under 5%, and prices barely
             moved in dollars. Around the GFC prices dipped about 4% and then jumped on rate cuts and grants.
           </p>
           <p className="m-0">
             Not modelled: tax brackets (take-home pay is a flat {TAKE_HOME * 100}%), government support, banks tightening
-            lending beyond the slow pass-through, or buying again after a forced sale.
-            The sizes are rough guesses, not estimates from research.
+            lending beyond the slow pass-through, or buying again after a forced sale. Change any of these guesses and the
+            answer can flip. Nobody knows how this will play out.
           </p>
         </div>
       </details>
