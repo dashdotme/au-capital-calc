@@ -10,6 +10,7 @@ import { AU_STATES, isAuState, stampDutyBasis } from '../utils/stampDuty';
 import { NEW_HOME_GROWTH_NOTE, NEW_HOME_GROWTH_SHORT, grantNote, guaranteeApplies, lmiNote } from '../utils/homeBuyerSupport';
 import MultiInput from './MultiInput';
 import NewHomeGrowthSources from './NewHomeGrowthSources';
+import HomeGrowthSources from './HomeGrowthSources';
 import { INVESTED_SHARE_NOTE } from '../utils/narrative';
 
 interface AssumptionsPanelProps {
@@ -289,7 +290,11 @@ export default function AssumptionsPanel({
           'Including dividends, before fees.')}
         {scenarioField('Property growth / year', inv.propertyGrowthRate,
           (propertyGrowthRate) => onInvestmentChange({ ...inv, propertyGrowthRate }), 'propertyGrowthRate', 'percent',
-          p.newHome ? <>{NEW_HOME_GROWTH_SHORT} <NewHomeGrowthSources />{growthNote && <> {growthNote}</>}</> : growthNote)}
+          <>
+            {p.newHome && <>{NEW_HOME_GROWTH_SHORT} <NewHomeGrowthSources />{' '}</>}
+            {growthNote && <>{growthNote}{' '}</>}
+            <HomeGrowthSources />
+          </>)}
         <label className="flex flex-col gap-1.5">
           <span className="text-[13px] text-ink-2">Income tax rate (incl. 2% Medicare)</span>
           <select

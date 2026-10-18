@@ -46,7 +46,9 @@ export const [DEFAULT_PROPERTY, DEFAULT_RENT] = applyCity(BASE_PROPERTY, BASE_RE
 export const DEFAULT_INVESTMENT: InvestmentInputs = applyPortfolio(
   {
     stockMarketReturn: 0,
-    propertyGrowthRate: { pessimistic: 3.0, baseline: 4.0, optimistic: 5.5 },
+    // Long-run nominal averages: incomes grow ~3–3.5%, and the 1990–2021 fall in rates won't repeat.
+    // See HomeGrowthSources for the reasoning and sources.
+    propertyGrowthRate: { pessimistic: 2.5, baseline: 4.0, optimistic: 5.0 },
     marginalTaxRate: 39,
     inflationRate: 2.5,
     stockTransactionCost: 0.1,

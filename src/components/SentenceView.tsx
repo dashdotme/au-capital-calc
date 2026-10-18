@@ -17,6 +17,7 @@ import { calculateStampDuty, stampDutyBasis } from '../utils/stampDuty';
 import { NEW_HOME_GROWTH_NOTE, depositNote, firstHomeGrant } from '../utils/homeBuyerSupport';
 import { NEW_HOME_DRAG_YEARS, NEW_HOME_GROWTH_DRAG } from '../utils/calculations';
 import NewHomeGrowthSources from './NewHomeGrowthSources';
+import HomeGrowthSources from './HomeGrowthSources';
 import { PORTFOLIOS, applyPortfolio } from '../portfolios';
 import { formatAdvantage, formatCompactCurrency, formatCurrency } from '../utils/format';
 import { INVESTED_SHARE_NOTE, PORTFOLIO_PHRASES, describeFlip, describeTiming, investedPhrase, whyCards, winnerAt } from '../utils/narrative';
@@ -298,7 +299,8 @@ export default function SentenceView({
       <section aria-label="Your situation" className="flex flex-col gap-4">
         {pillsAnswer}
         <p className="m-0 text-sm text-muted">
-          Tap any underlined value to change it. Mortgage rate {rate}%, home price growth {growth}%
+          Tap any underlined value to change it. Mortgage rate {rate}%, home price growth {growth}% a year (
+          <HomeGrowthSources label="why" />)
           {p.newHome && (
             <> ({+(growth - NEW_HOME_GROWTH_DRAG).toFixed(2)}% for the first {NEW_HOME_DRAG_YEARS} years, as it's new: <NewHomeGrowthSources label="why" />)</>
           )} and the rest are under{' '}
