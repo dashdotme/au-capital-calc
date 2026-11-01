@@ -12,7 +12,7 @@ AU Capital Calc is a financial calculator comparing renting vs buying property i
 - `npm run build` - Type-check with TypeScript and build for production
 - `npm run lint` - Run ESLint on the codebase
 - `npm run preview` - Preview production build locally
-- `npm test` - Run engine invariant tests (`src/utils/calculations.test.ts`)
+- `npm test` - Run engine invariant tests (`src/utils/calculations.test.ts`) and falsification tests (`src/utils/falsifiability.test.ts`: closed-form oracles, accounting identities, metamorphic relations, seeded fuzz)
 
 ## Architecture
 
