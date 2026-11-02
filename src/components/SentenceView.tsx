@@ -53,6 +53,8 @@ interface SentenceViewProps {
   investedOutcomes: { share: number; advantage: number }[];
   /** Price-to-income warning, shown under the answer when growth looks stretched */
   realityCheck?: ReactNode;
+  /** Rent-minus-buy advantage at the sell year if the owner never moved, when they do move */
+  neverMoveAdvantage?: number | null;
 }
 
 type Panel = 'afford' | 'compare' | 'markets' | null;
@@ -107,6 +109,7 @@ export default function SentenceView({
   portfolioComparison,
   investedOutcomes,
   realityCheck,
+  neverMoveAdvantage = null,
 }: SentenceViewProps) {
   const { INK, SERIES, axisProps, tooltipProps } = useChart();
   const wide = useMediaQuery('(min-width: 640px)');
@@ -310,10 +313,27 @@ export default function SentenceView({
           ) : (
             <>
               {winner === 'rent' ? 'Renting' : 'Buying'}, by{' '}
-              <span className={`font-mono font-medium ${winner === 'rent' ? 'text-rent' : 'text-buy'}`}>{formatCompactCurrency(gap)}</span>.
+              <span className={`font-mono font-medium ${winner === 'rent' ? 'text-rent' : 'text-buy'}`}>
+                {/* Monospace gives "." a full character cell; pull it in so "$1.39m" doesn't read as "$1 . 39m" */}
+                {formatCompactCurrency(gap).split(/([.,])/).map((part, i) =>
+                  part === '.' || part === ',' ? <span key={i} className="-mx-[0.14em]">{part}</span> : part
+                )}
+              </span>.
             </>
           )}
         </h1>
+        {neverMoveAdvantage !== null && Math.abs(neverMoveAdvantage - advantage(final)) >= 500 && (
+          <p className="-mt-2 m-0 text-xl text-muted sm:text-2xl">
+            (or{' '}
+            {Math.abs(neverMoveAdvantage) < 500
+              ? 'about even'
+              : <>
+                  {(neverMoveAdvantage > 0) !== (winner === 'rent') && `${neverMoveAdvantage > 0 ? 'renting' : 'buying'} by `}
+                  <span className="font-mono">{formatCompactCurrency(Math.abs(neverMoveAdvantage))}</span>
+                </>}
+            {' '}if you never move)
+          </p>
+        )}
         <p className="m-0 max-w-3xl text-lg leading-relaxed text-ink-2 sm:text-xl">
           {describeTiming(baseline, sellYear)} {describeFlip(breakEvens, winner)}
         </p>

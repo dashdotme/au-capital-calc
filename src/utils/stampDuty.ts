@@ -199,3 +199,29 @@ export function stampDutyBasis(state: AuState | undefined, firstHomeBuyer: boole
   if (!firstHomeBuyer) return `${state} owner-occupier rates, 2026–27.`;
   return `${state} first home buyers: ${STAMP_DUTY_RULES[state].firstHomeNote}.`;
 }
+
+/**
+ * The ACT is replacing stamp duty with higher general rates and aims to abolish duty on all
+ * home purchases, but has published no year-by-year timetable (ACT Budget 2026–27). Judgment
+ * call: owner-occupier duty falls in a straight line to nothing over 15 years.
+ */
+export const ACT_DUTY_PHASE_OUT_YEARS = 15;
+
+/**
+ * Used when no state is picked. From the schedules above, full owner-occupier duty on a $1m
+ * home is 3.1% (QLD), 3.9% (NSW), 4.3% (WA) and 5.5% (VIC): about 4% across the larger states.
+ */
+const NO_STATE_DUTY_RATE = 0.04;
+
+/**
+ * Stamp duty on the next home when an owner moves `yearsFromNow` years out, at full
+ * owner-occupier rates (no longer a first home buyer). Judgment call: thresholds are assumed
+ * to rise with prices (`index`), so duty is today's schedule applied in today's dollars.
+ * Most states don't index their thresholds, so real future duty is likely higher.
+ */
+export function moveStampDuty(state: AuState | undefined, value: number, yearsFromNow: number, index: number): number {
+  if (!state) return value * NO_STATE_DUTY_RATE;
+  const duty = STAMP_DUTY_RULES[state].standard(value / index) * index;
+  if (state !== 'ACT') return duty;
+  return duty * Math.max(0, 1 - yearsFromNow / ACT_DUTY_PHASE_OUT_YEARS);
+}

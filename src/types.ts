@@ -28,6 +28,14 @@ export interface PropertyInputs {
   sellingCostRate: number;
   capitalGainsTaxRate: number;
   offsetAccountBalance?: number;
+  /** Strata (body corporate) levies per year in today's dollars; 0 for a freestanding house */
+  strataLevies?: number;
+  /**
+   * Years between owner moves; 0 = stay put until selling. Each move sells and buys a home of
+   * the same value: selling costs, stamp duty (not first-home rates), other purchase costs
+   * and removalists.
+   */
+  ownerMoveFrequency?: number;
   /** Lenders mortgage insurance, capitalised into the loan (typically only when LVR > 80%) */
   lmi?: number;
   /** Estimate LMI from LVR and the 5% Deposit Scheme instead of using the figure entered */
@@ -66,6 +74,27 @@ export interface InvestmentInputs {
   stockVolatility?: number;
   /** Id of the portfolio preset these values came from, if any */
   portfolio?: string;
+  /**
+   * Whether the buyer's spare cash fills the offset (up to the loan balance) before buying
+   * shares; default true
+   */
+  buyerSurplusToOffset?: boolean;
+  /** Age today; with `couple`, drives the age pension and when super contributions stop */
+  age?: number;
+  /** Two adults (pension and rent assistance at couple rates, gains split between two people) */
+  couple?: boolean;
+  /** Share (%) of each month's invested saving salary-sacrificed into super instead of shares */
+  superShare?: number;
+  /** Unused concessional cap room per year for the household, today's dollars (pre-tax) */
+  superCapRoom?: number;
+  /**
+   * Sell shares gradually instead of all at once at the marginal rate: the gain is spread
+   * over `saleYears` and taxed through the brackets on top of `saleIncome` per person.
+   */
+  spreadSale?: boolean;
+  saleYears?: number;
+  /** Other taxable income per person in each year of selling, today's dollars */
+  saleIncome?: number;
 }
 
 /**
@@ -97,12 +126,24 @@ export interface YearlySnapshot {
   mortgageContributions: number;
   /** Selling costs plus CGT if the home were sold this year */
   mortgageSaleCosts: number;
+  /** Cumulative strata levies */
+  mortgageStrata: number;
+  /** Cumulative cost of owner moves: selling costs, stamp duty, purchase costs, removalists, CGT */
+  mortgageMoveCosts: number;
+  /** Buyer's super built from salary-sacrificed savings (before any exit tax) */
+  mortgageSuperValue: number;
+  /** Cumulative age pension received by the buyer */
+  mortgagePension: number;
   /** Cumulative monthly savings the buyer spent instead of investing (see `investedShare`) */
   mortgageSpent: number;
   rentTotalPaid: number;
   rentMovingCosts: number;
   rentInsurance: number;
   rentInvestmentValue: number;
+  /** Renter's super built from salary-sacrificed savings (before any exit tax) */
+  rentSuperValue: number;
+  /** Cumulative age pension and rent assistance received by the renter */
+  rentPension: number;
   /** Renter net worth before selling costs and taxes */
   rentNetPosition: number;
   /** Renter net worth after liquidating investments and paying CGT */

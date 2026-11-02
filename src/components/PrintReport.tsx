@@ -3,7 +3,7 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'rec
 import type { BreakEvenResult, MonteCarloResults, ScenarioResults, ScenarioValue, YearlySnapshot } from '../types';
 import { encodeState, type SharedState } from '../utils/shareState';
 import { calculateMortgagePayment, isScenarioValue, resolveScenarioValue, upfrontCostsOf, NEW_HOME_DRAG_YEARS, NEW_HOME_GROWTH_DRAG } from '../utils/calculations';
-import { explainGap } from '../utils/gap';
+import { explainGap, offsetOf } from '../utils/gap';
 import { flipDistance, formatMetricValue } from '../utils/flip';
 import { formatAdvantage, formatCompactCurrency, formatCurrency, formatPercent } from '../utils/format';
 import { CITIES } from '../cities';
@@ -95,7 +95,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
     : null;
 
   const drivers = [...explainGap(final, p, deflator)].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-  const offsetCash = final.mortgageNetPosition - final.mortgageEquity - final.mortgageInvestmentValue;
+  const offsetCash = offsetOf(final);
   const flips = breakEvens.filter((b) => b.breakEvenValue !== null).sort((a, b) => flipDistance(a) - flipDistance(b));
 
   const loan = Math.max(0, p.propertyPrice - p.deposit + (p.lmi ?? 0));
@@ -122,7 +122,12 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
     ['CGT on home', `${p.capitalGainsTaxRate}%`],
     ['Rent', `${formatCurrency(r.monthlyRent)} / month`],
     ['Rent growth', pct(r.rentIncreaseRate)],
-    ['Moving', `Every ${r.movingFrequency} yrs, ${formatCurrency(r.movingCost)} each`],
+    ['Moving (renter)', `Every ${r.movingFrequency} yrs, ${formatCurrency(r.movingCost)} each`],
+    ['Moving (owner)', (p.ownerMoveFrequency ?? 0) > 0 ? `Every ${p.ownerMoveFrequency} yrs: selling costs, stamp duty, purchase costs, removalists` : 'Stays put'],
+    ['Strata', `${formatCurrency(p.strataLevies ?? 0)} / yr`],
+    ['Household', `${inv.couple ?? true ? 'Couple' : 'Single'}, age ${inv.age ?? 35}`],
+    ['Savings into super', `${inv.superShare ?? 0}% (cap room ${formatCurrency(inv.superCapRoom ?? 0)} / yr)`],
+    ['Selling shares', inv.spreadSale ? `Over ${inv.saleYears} yrs, ${formatCurrency(inv.saleIncome ?? 0)} other income each` : 'All at once at the tax rate below'],
     ['Portfolio', portfolio ? `${portfolio.name} (${portfolio.example})` : 'Custom'],
     ['Total return', pct(inv.stockMarketReturn)],
     ['Monthly saving invested', `${inv.investedShare ?? 100}%`],
@@ -226,6 +231,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
             ...(final.mortgageLoanBalance > 1 ? [['Loan still owed', formatCurrency(-final.mortgageLoanBalance), '–']] : []),
             ['Shares', formatCurrency(final.mortgageInvestmentValue), formatCurrency(final.rentInvestmentValue)],
             ...(Math.abs(offsetCash) > 1 ? [['Offset cash', formatCurrency(offsetCash), '–']] : []),
+            ...(final.mortgageSuperValue + final.rentSuperValue > 1 ? [['Super (from salary sacrifice)', formatCurrency(final.mortgageSuperValue), formatCurrency(final.rentSuperValue)]] : []),
             ['Selling costs and tax', formatCurrency(final.mortgageNetPositionAfterSale - final.mortgageNetPosition), formatCurrency(final.rentNetPositionAfterTax - final.rentNetPosition)],
             [<strong key="n">Net worth</strong>, <strong key="b">{formatCurrency(final.mortgageNetPositionAfterSale)}</strong>, <strong key="r">{formatCurrency(final.rentNetPositionAfterTax)}</strong>],
           ]}

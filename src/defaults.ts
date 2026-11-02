@@ -22,15 +22,22 @@ const BASE_PROPERTY: PropertyInputs = {
   // Rough: conveyancing (~$2k), building and pest inspection (~$600), loan and mortgage
   // registration fees (~$1k) and moving in (~$2–3k)
   otherPurchaseCosts: 7000,
-  // Rough: the common 1%-of-value-a-year rule of thumb for upkeep (1–2% is often quoted;
-  // apartments pay strata instead, which this also stands in for)
+  // Rough: the common 1%-of-value-a-year rule of thumb for upkeep (1–2% is often quoted).
+  // Apartments pay strata on top, entered separately below.
   maintenanceRate: 1.0,
+  // A freestanding house. Rough, from industry guides (no official dataset): small walk-up
+  // blocks ~$2–5k a year, high-rises with lifts and amenities $8k+
+  strataLevies: 0,
   councilRates: 3100,
   buildingInsurance: 2000,
   contentsInsurance: 450, // rough: a basic contents policy
   // Rough: agent commission (~2–2.5% in capitals) plus marketing and conveyancing
   sellingCostRate: 3.0,
   capitalGainsTaxRate: 0, // a main residence is exempt from CGT
+  // Years between owner moves (0 = stays put until selling). Sellers had held houses ~9 years
+  // and units ~8 (Domain, 1H 2025); profitable house resales had a median hold of 9.3 years
+  // (Cotality Pain and Gain, June quarter 2026).
+  ownerMoveFrequency: 9,
   // Rough: a modest emergency buffer kept in the offset; both households start with it
   offsetAccountBalance: 50000,
   lmi: 0, // estimated from the deposit by withPurchaseCosts
@@ -70,6 +77,23 @@ export const DEFAULT_INVESTMENT: InvestmentInputs = applyPortfolio(
     stockTransactionCost: 0.1,
     dividendReinvestment: true,
     investedShare: 100,
+    // Cash in an offset earns the mortgage rate risk-free and untaxed (a 5.75% loan is worth
+    // ~9.4% pre-tax at the 39% rate), the usual choice while a loan is outstanding
+    buyerSurplusToOffset: true,
+    // Mean first home buyer age for an established home, ABS Survey of Income and Housing
+    // 2017–18 (via AHURI, "When are Australians buying their first home"), the latest official
+    // figure; surveys since put it in the low-to-mid 30s
+    age: 36,
+    couple: true,
+    superShare: 0,
+    // Rough: two earners on half the Brisbane median household income (~$56.5k each) have the
+    // $32,500 concessional cap (2026–27) less ~$6.8k employer super (12%) each
+    superCapRoom: 51000,
+    spreadSale: false,
+    // Judgment call, used only when spreading is switched on: selling down over a decade of
+    // retirement with no other taxable income
+    saleYears: 10,
+    saleIncome: 0,
   },
   defaultPortfolio
 );

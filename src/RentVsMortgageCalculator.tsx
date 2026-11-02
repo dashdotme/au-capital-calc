@@ -631,6 +631,9 @@ export default function RentVsMortgageCalculator() {
               advantage: advantageFor(propertyInputs, rentInputs, { ...investmentInputs, investedShare: value }, timeHorizon),
             }))}
             realityCheck={realityCheck}
+            neverMoveAdvantage={(propertyInputs.ownerMoveFrequency ?? 0) > 0
+              ? advantageFor({ ...propertyInputs, ownerMoveFrequency: 0 }, rentInputs, investmentInputs, timeHorizon)
+              : null}
           />
         )}
 

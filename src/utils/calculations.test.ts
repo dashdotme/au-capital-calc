@@ -195,11 +195,12 @@ describe('runComparison', () => {
 });
 
 describe('share of the monthly saving invested', () => {
+  // Spare cash goes to shares, so housing costs don't depend on how much is invested
   const at = (investedShare: number, years = 30) =>
-    last(runComparison(property, rent, { ...investment, investedShare }, years));
+    last(runComparison(property, rent, { ...investment, investedShare, buyerSurplusToOffset: false }, years));
 
   it('defaults to investing all of it', () => {
-    expect(at(100)).toEqual(last(runComparison(property, rent, investment, 30)));
+    expect(at(100)).toEqual(last(runComparison(property, rent, { ...investment, buyerSurplusToOffset: false }, 30)));
     expect(at(100).rentSpent).toBe(0);
   });
 

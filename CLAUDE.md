@@ -12,7 +12,7 @@ AU Capital Calc is a financial calculator comparing renting vs buying property i
 - `npm run build` - Type-check with TypeScript and build for production
 - `npm run lint` - Run ESLint on the codebase
 - `npm run preview` - Preview production build locally
-- `npm test` - Run engine invariant tests (`src/utils/calculations.test.ts`) and falsification tests (`src/utils/falsifiability.test.ts`: closed-form oracles, accounting identities, metamorphic relations, seeded fuzz)
+- `npm test` - Run engine invariant tests (`src/utils/calculations.test.ts`), falsification tests (`src/utils/falsifiability.test.ts`: closed-form oracles, accounting identities, metamorphic relations, seeded fuzz) and retirement/move tests (`src/utils/retirement.test.ts`, checked against published Services Australia and ATO figures)
 
 ## Architecture
 
@@ -30,6 +30,9 @@ The application follows a unidirectional data flow:
 - Each month both spend the same total: whichever option has lower housing costs that month invests the difference (the buyer gets a side portfolio once owning becomes cheaper, e.g. after the loan is paid off). `InvestmentInputs.investedShare` (default 100%) invests only part of that saving; the rest is spent and tracked as `rentSpent` / `mortgageSpent`, which the gap breakdown counts so it still adds up.
 - "Net position" fields are net worths, directly comparable. `...AfterSale` / `...AfterTax` liquidate everything: selling costs, property CGT, brokerage and stock CGT on gains over the true cost base.
 - Do not subtract costs paid from net worth: the equal-budget setup already accounts for them, and subtracting again double counts.
+- Owner moves (`ownerMoveFrequency`) are owner costs in the month they happen: selling costs, full-rate stamp duty on a same-value home (`moveStampDuty`), purchase costs and removalists. Strata levies are an owner running cost.
+- By default the buyer's spare cash fills the offset before buying shares (`buyerSurplusToOffset`). `superShare` salary-sacrifices part of each invested saving into a super `Portfolio` (15% tax, two-thirds of gains taxed) until pension age; contributions count the after-tax dollars given up.
+- From pension age (67) each household gets the means-tested age pension (`utils/retirement.ts`); the home is exempt from the assets test and renters' rent assistance is tested with the pension. Pension income counts like a housing saving: whoever gets more invests the difference.
 
 ### Key Calculation Functions
 
@@ -43,7 +46,8 @@ The application follows a unidirectional data flow:
 
 - **Stock return is total return** (dividends included); dividend yield only changes how much is taxed annually vs deferred as capital gains
 - **Franking credits**: grossed up at the 30% company rate; excess credits are refunded
-- **CGT discount**: 50% applied to property (cost base includes purchase and selling costs) and stocks
+- **CGT discount**: 50% applied to property (cost base includes purchase and selling costs) and stocks. Shares are sold at the flat marginal rate by default; `spreadSale` instead spreads the gain over `saleYears` and two people (couple) through the 2027–28 brackets on top of `saleIncome`
+- **Thresholds in retirement.ts** are 2026 dollars scaled by inflation (a judgment call; documented in the file header)
 - **Marginal tax rate**: stage 3 brackets including the 2% Medicare levy
 - **Stamp duty**: `utils/stampDuty.ts` holds 2026–27 owner-occupier schedules and first home buyer relief per state, including new-home exemptions. When `PropertyInputs.state` is set it is recalculated on every input update; no state means a manual figure
 - **First home buyer support**: `utils/homeBuyerSupport.ts` holds first home owner grants (new homes), the 5% Deposit Scheme (waives LMI under the price cap) and a rough LMI estimate. `withPurchaseCosts()` derives stamp duty, `firstHomeGrant` and LMI (when `lmiEstimated`); the root applies it on every input update. The grant reduces upfront costs via `upfrontCostsOf()`

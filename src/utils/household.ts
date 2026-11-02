@@ -7,9 +7,14 @@
 // can't cover three months of shortfalls is forced to sell and rents from then on. A forced
 // sale never captures recent growth: the price is the lower of today's value and the value
 // two years earlier, less a fire-sale discount. A renter who runs dry downsizes to a 20% cheaper rental, then
-// borrows at a personal-loan rate. Mechanics otherwise mirror runComparison.
+// borrows at a personal-loan rate. Mechanics otherwise mirror runComparison, except
+// salary sacrifice, the age pension, spread-out share sales and filling the offset
+// first, which aren't modelled here. (Both households here invest their whole surplus, not
+// just the difference, so filling the offset would pay the loan off with income the engine
+// never sees.)
 import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
 import { Portfolio, calculateMortgagePayment, newHomeGrowthDrag, upfrontCostsOf, type RatePaths } from '../utils/calculations';
+import { moveStampDuty } from './stampDuty';
 
 export interface Household {
   /** Gross household income in year 1 */
@@ -139,12 +144,18 @@ export function simulateHousehold(
       payment = calculateMortgagePayment(balance, rate, (totalMonths - month) / 12);
     }
     const priceIndex = Math.pow(1 + inflation, year - 1);
-    const rates = property.councilRates * priceIndex;
+    const rates = (property.councilRates + (property.strataLevies ?? 0)) * priceIndex;
     const ownerInsurance = (property.buildingInsurance + property.contentsInsurance) * priceIndex;
     const renterInsurance = rent.contentsInsurance * priceIndex;
     const moves = rent.movingFrequency > 0 && year % rent.movingFrequency === 0;
     const movingCost = rent.movingCost * priceIndex;
     const living = household.livingCosts * priceIndex;
+    // Owner moves at the start of the year, as in the engine (CGT aside: a home is exempt)
+    const moveEvery = Math.round(property.ownerMoveFrequency ?? 0);
+    const ownerMove = owns && moveEvery > 0 && year > 1 && (year - 1) % moveEvery === 0
+      ? value * (property.sellingCostRate / 100) + moveStampDuty(property.state, value, year - 1, priceIndex)
+        + (property.otherPurchaseCosts + rent.movingCost) * priceIndex
+      : 0;
 
     for (let m = 1; m <= 12; m++) {
       month++;
@@ -181,7 +192,7 @@ export function simulateHousehold(
         } else {
           balance = 0;
         }
-        buyerHousing = loanPayment + value * (property.maintenanceRate / 100 / 12) + rates / 12 + ownerInsurance / 12;
+        buyerHousing = loanPayment + value * (property.maintenanceRate / 100 / 12) + rates / 12 + ownerInsurance / 12 + (m === 1 ? ownerMove : 0);
       } else {
         buyerHousing = monthlyRent * buyerRentFactor + renterInsurance / 12 + (moves && m === 12 ? movingCost : 0);
       }

@@ -1,6 +1,7 @@
 import type { PropertyInputs, YearlySnapshot } from '../types';
 import { formatCompactCurrency, formatCurrency } from '../utils/format';
 import { upfrontCostsOf } from '../utils/calculations';
+import { offsetOf, runningCostsOf } from '../utils/gap';
 
 interface LedgerTableProps {
   final: YearlySnapshot;
@@ -52,9 +53,8 @@ export default function LedgerTable({
   onSellYearChange,
   changeFlash,
 }: LedgerTableProps) {
-  const offset = s.mortgageNetPosition - s.mortgageEquity - s.mortgageInvestmentValue;
-  const homeAfterSale = s.mortgagePropertyValue - s.mortgageSaleCosts - s.mortgageLoanBalance;
-  const buyerSharesAfterTax = s.mortgageNetPositionAfterSale - homeAfterSale - offset;
+  const offset = offsetOf(s);
+  const hasSuper = s.mortgageSuperValue + s.rentSuperValue > 1;
   const purchaseCosts = (upfrontCostsOf(property) + (property.lmi ?? 0)) / deflator;
 
   const groups: { title: string; rows: Row[] }[] = [
@@ -65,9 +65,10 @@ export default function LedgerTable({
         { label: 'Loan still owed', buy: -s.mortgageLoanBalance, rent: null, kind: 'asset' },
         ...(Math.abs(offset) > 1 ? [{ label: 'Offset savings', buy: offset, rent: null, kind: 'asset' as const }] : []),
         { label: 'Shares', buy: s.mortgageInvestmentValue, rent: s.rentInvestmentValue, kind: 'asset' },
+        ...(hasSuper ? [{ label: 'Super (from salary sacrifice)', buy: s.mortgageSuperValue, rent: s.rentSuperValue, kind: 'asset' as const }] : []),
         {
           label: 'Selling costs and tax',
-          buy: -(s.mortgageSaleCosts + s.mortgageInvestmentValue - buyerSharesAfterTax),
+          buy: s.mortgageNetPositionAfterSale - s.mortgageNetPosition,
           rent: s.rentNetPositionAfterTax - s.rentNetPosition,
           kind: 'asset',
         },
@@ -77,7 +78,10 @@ export default function LedgerTable({
       title: 'What you paid along the way',
       rows: [
         { label: 'Mortgage interest', buy: s.mortgageTotalInterest, rent: null, kind: 'cost' },
-        { label: 'Maintenance, rates and insurance', buy: s.mortgageMaintenance + s.mortgageRates + s.mortgageInsurance, rent: null, kind: 'cost' },
+        { label: s.mortgageStrata > 0.5 ? 'Maintenance, rates, strata and insurance' : 'Maintenance, rates and insurance', buy: runningCostsOf(s), rent: null, kind: 'cost' },
+        ...(s.mortgageMoveCosts > 0.5
+          ? [{ label: 'Moving house (selling, stamp duty, removalists)', buy: s.mortgageMoveCosts, rent: null, kind: 'cost' as const }]
+          : []),
         { label: 'Rent, moving and contents insurance', buy: null, rent: s.rentTotalPaid + s.rentMovingCosts + s.rentInsurance, kind: 'cost' },
         { label: (property.firstHomeGrant ?? 0) > 0 ? 'Purchase costs, less the grant' : 'Stamp duty and purchase costs', buy: purchaseCosts, rent: null, kind: 'cost' },
         ...(s.rentSpent + s.mortgageSpent > 0.5
@@ -85,9 +89,15 @@ export default function LedgerTable({
           : []),
       ],
     },
+    ...(s.mortgagePension + s.rentPension > 0.5
+      ? [{
+          title: 'Received in retirement',
+          rows: [{ label: 'Age pension and rent assistance', buy: s.mortgagePension, rent: s.rentPension, kind: 'asset' as const }],
+        }]
+      : []),
     {
       title: 'Savings invested',
-      rows: [{ label: 'New money put into shares', buy: s.mortgageContributions, rent: s.rentContributions, kind: 'info' }],
+      rows: [{ label: hasSuper ? 'New money put into shares and super' : 'New money put into shares', buy: s.mortgageContributions, rent: s.rentContributions, kind: 'info' }],
     },
   ];
 

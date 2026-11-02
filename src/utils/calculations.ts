@@ -1,4 +1,9 @@
 import type { PropertyInputs, RentInputs, InvestmentInputs, YearlySnapshot, ScenarioValue, ScenarioResults } from '../types';
+import { moveStampDuty } from './stampDuty';
+import {
+  PENSION_AGE, SUPER_ACCESS_AGE, SUPER_CONTRIBUTIONS_TAX, SUPER_EARNINGS_TAX, SUPER_TAXABLE_GAIN,
+  agePension, rentAssistance, spreadGainTax,
+} from './retirement';
 
 /** Franking credits are grossed up at the 30% company tax rate */
 const COMPANY_TAX_RATE = 0.3;
@@ -59,8 +64,9 @@ export interface RatePaths {
 
 /**
  * Share portfolio with an ATO-style cost base. Brokerage is paid on every buy and on
- * the final sale; dividends are taxed at the marginal rate with franking credits
- * offsetting tax (and refunded if they exceed it).
+ * the final sale; dividends are taxed at `taxRate` with franking credits offsetting tax
+ * (and refunded if they exceed it). `taxableGainShare` is the part of a capital gain that
+ * is taxed: half for individuals, two-thirds for a super fund.
  */
 export class Portfolio {
   value = 0;
@@ -72,17 +78,22 @@ export class Portfolio {
   contributions = 0;
   private readonly feeRate: number;
   private readonly taxRate: number;
+  private readonly taxableGainShare: number;
 
-  constructor(feeRate: number, taxRate: number) {
+  constructor(feeRate: number, taxRate: number, taxableGainShare = CGT_DISCOUNT) {
     this.feeRate = feeRate;
     this.taxRate = taxRate;
+    this.taxableGainShare = taxableGainShare;
   }
 
-  /** Add new savings to the portfolio. */
-  contribute(amount: number) {
+  /**
+   * Add new savings. `invested` is what lands in the portfolio when it differs from what the
+   * saver gave up (salary sacrifice: pre-tax dollars less contributions tax).
+   */
+  contribute(amount: number, invested = amount) {
     if (amount <= 0) return;
     this.contributions += amount;
-    this.buy(amount);
+    this.buy(invested);
   }
 
   buy(amount: number) {
@@ -129,7 +140,7 @@ export class Portfolio {
     if (remaining <= 0 || this.value <= 0) return fromCash;
     const costShare = this.costBase / this.value;
     const gainPerDollar = Math.max(0, 1 - this.feeRate - costShare);
-    const netPerDollar = 1 - this.feeRate - gainPerDollar * CGT_DISCOUNT * this.taxRate;
+    const netPerDollar = 1 - this.feeRate - gainPerDollar * this.taxableGainShare * this.taxRate;
     const sold = Math.min(this.value, remaining / netPerDollar);
     this.costBase -= costShare * sold;
     this.value -= sold;
@@ -137,11 +148,14 @@ export class Portfolio {
     return needed - remaining;
   }
 
-  /** Value if everything were sold today, after brokerage and discounted CGT. */
-  liquidationValue(): number {
+  /**
+   * Value if everything were sold today, after brokerage and discounted CGT. `gainTax` turns
+   * the taxable (discounted) gain into tax; by default it's taxed at the flat `taxRate`.
+   */
+  liquidationValue(gainTax?: (taxableGain: number) => number): number {
     const proceeds = this.value * (1 - this.feeRate);
-    const gain = proceeds - this.costBase;
-    const tax = gain > 0 ? gain * CGT_DISCOUNT * this.taxRate : 0;
+    const taxable = Math.max(0, proceeds - this.costBase) * this.taxableGainShare;
+    const tax = taxable > 0 ? (gainTax ? gainTax(taxable) : taxable * this.taxRate) : 0;
     return proceeds - tax + this.cash;
   }
 }
@@ -170,6 +184,27 @@ export function runComparison(
   const investedShare = Math.min(100, Math.max(0, investmentInputs.investedShare ?? 100)) / 100;
   const startingOffset = Math.max(0, propertyInputs.offsetAccountBalance ?? 0);
   const totalMonths = Math.max(0, Math.round(propertyInputs.loanTerm * 12));
+  const strataLevies = Math.max(0, propertyInputs.strataLevies ?? 0);
+  const moveEvery = Math.max(0, Math.round(propertyInputs.ownerMoveFrequency ?? 0));
+  const homeCgtRate = propertyInputs.capitalGainsTaxRate / 100;
+
+  const surplusToOffset = investmentInputs.buyerSurplusToOffset ?? true;
+  const couple = investmentInputs.couple ?? true;
+  const startAge = investmentInputs.age ?? 35;
+  const superShare = Math.min(100, Math.max(0, investmentInputs.superShare ?? 0)) / 100;
+  const superCapRoom = Math.max(0, investmentInputs.superCapRoom ?? 0);
+  const spreadSale = investmentInputs.spreadSale ?? false;
+  const saleYears = investmentInputs.saleYears ?? 1;
+  const saleIncome = investmentInputs.saleIncome ?? 0;
+
+  /** Tax on the discounted gain when selling shares, in the year whose price index is `index`. */
+  const shareSaleTax = (index: number) => (taxableGain: number) =>
+    spreadSale
+      ? spreadGainTax(taxableGain / index, saleYears, couple ? 2 : 1, saleIncome) * index
+      : taxableGain * marginalTaxRate;
+  /** Super is tax-free to withdraw once retired past preservation age; before that the fund's CGT applies. */
+  const superAfterTax = (fund: Portfolio, age: number) =>
+    age >= SUPER_ACCESS_AGE ? fund.holdingValue() : fund.liquidationValue();
 
   // Both households start with the same capital: the buyer spends deposit + purchase
   // costs on the property and parks savings in the offset; the renter invests all of it.
@@ -179,6 +214,9 @@ export function runComparison(
 
   const renter = new Portfolio(feeRate, marginalTaxRate);
   const buyer = new Portfolio(feeRate, marginalTaxRate);
+  // Super funds pay no brokerage on members' contributions
+  const renterSuper = new Portfolio(0, SUPER_EARNINGS_TAX, SUPER_TAXABLE_GAIN);
+  const buyerSuper = new Portfolio(0, SUPER_EARNINGS_TAX, SUPER_TAXABLE_GAIN);
   renter.contribute(startingCapital);
 
   let balance = loanAmount;
@@ -187,7 +225,10 @@ export function runComparison(
   let monthlyPayment = 0;
   let monthsElapsed = 0;
   let propertyValue = propertyInputs.propertyPrice;
+  /** Purchase price plus costs of the home currently owned (reset when the owner moves) */
+  let homeCostBase = propertyInputs.propertyPrice + upfrontCosts;
   let monthlyRent = rentInputs.monthlyRent;
+  let priceIndex = 1;
 
   let totalPrincipalAndInterest = 0;
   let totalInterest = 0;
@@ -199,17 +240,25 @@ export function runComparison(
   let cumulativeRenterInsurance = 0;
   let renterSpent = 0;
   let buyerSpent = 0;
+  let cumulativeStrata = 0;
+  let cumulativeOwnerMoves = 0;
+  let buyerPension = 0;
+  let renterPension = 0;
 
   const results: YearlySnapshot[] = [];
 
   const snapshot = (year: number, mortgageAnnualCost: number, rentAnnualCost: number) => {
     const sellingCosts = propertyValue * (propertyInputs.sellingCostRate / 100);
-    const propertyCostBase = propertyInputs.propertyPrice + upfrontCosts + sellingCosts;
-    const propertyGain = propertyValue - propertyCostBase;
-    const propertyCGT = propertyGain > 0
-      ? propertyGain * CGT_DISCOUNT * (propertyInputs.capitalGainsTaxRate / 100)
-      : 0;
+    const propertyGain = propertyValue - (homeCostBase + sellingCosts);
+    const propertyCGT = propertyGain > 0 ? propertyGain * CGT_DISCOUNT * homeCgtRate : 0;
     const equity = propertyValue - balance;
+    const age = startAge + year;
+    // Liquidation uses this year-end's price level (snapshot 0 is today)
+    const saleTax = shareSaleTax(year === 0 ? 1 : priceIndex * (1 + inflation));
+    const buyerHoldings = buyer.holdingValue() + buyerSuper.holdingValue();
+    const buyerAfterTax = buyer.liquidationValue(saleTax) + superAfterTax(buyerSuper, age);
+    const renterHoldings = renter.holdingValue() + renterSuper.holdingValue();
+    const renterAfterTax = renter.liquidationValue(saleTax) + superAfterTax(renterSuper, age);
 
     results.push({
       year,
@@ -218,27 +267,32 @@ export function runComparison(
       mortgagePropertyValue: propertyValue,
       mortgageLoanBalance: balance,
       mortgageInvestmentValue: buyer.holdingValue(),
-      mortgageNetPosition: equity + offset + buyer.holdingValue(),
-      mortgageNetPositionAfterSale:
-        equity - sellingCosts - propertyCGT + offset + buyer.liquidationValue(),
+      mortgageNetPosition: equity + offset + buyerHoldings,
+      mortgageNetPositionAfterSale: equity - sellingCosts - propertyCGT + offset + buyerAfterTax,
       mortgageMaintenance: cumulativeMaintenance,
       mortgageRates: cumulativeRates,
       mortgageInsurance: cumulativeOwnerInsurance,
       mortgageTotalInterest: totalInterest,
       mortgageAnnualCost,
-      mortgageContributions: buyer.contributions,
+      mortgageContributions: buyer.contributions + buyerSuper.contributions,
       mortgageSaleCosts: sellingCosts + propertyCGT,
+      mortgageStrata: cumulativeStrata,
+      mortgageMoveCosts: cumulativeOwnerMoves,
+      mortgageSuperValue: buyerSuper.holdingValue(),
+      mortgagePension: buyerPension,
       mortgageSpent: buyerSpent,
       rentTotalPaid: cumulativeRent,
       rentMovingCosts: cumulativeMovingCosts,
       rentInsurance: cumulativeRenterInsurance,
       rentInvestmentValue: renter.holdingValue(),
-      rentNetPosition: renter.holdingValue(),
-      rentNetPositionAfterTax: renter.liquidationValue(),
+      rentSuperValue: renterSuper.holdingValue(),
+      rentPension: renterPension,
+      rentNetPosition: renterHoldings,
+      rentNetPositionAfterTax: renterAfterTax,
       rentDividends: renter.dividends,
       rentFrankingCredits: renter.frankingCredits,
       rentAnnualCost,
-      rentContributions: renter.contributions,
+      rentContributions: renter.contributions + renterSuper.contributions,
       rentSpent: renterSpent,
     });
   };
@@ -262,8 +316,12 @@ export function runComparison(
       );
     }
 
-    const priceIndex = Math.pow(1 + inflation, year - 1);
+    priceIndex = Math.pow(1 + inflation, year - 1);
+    const ageThisYear = startAge + year - 1;
+    const working = ageThisYear < PENSION_AGE;
+    const pensionAge = ageThisYear >= PENSION_AGE;
     const annualRates = propertyInputs.councilRates * priceIndex;
+    const annualStrata = strataLevies * priceIndex;
     const annualOwnerInsurance =
       (propertyInputs.buildingInsurance + propertyInputs.contentsInsurance) * priceIndex;
     const annualRenterInsurance = rentInputs.contentsInsurance * priceIndex;
@@ -273,6 +331,48 @@ export function runComparison(
 
     let mortgageAnnualCost = 0;
     let rentAnnualCost = 0;
+
+    // Owner moves at the start of the year: sell, then buy a home of the same value at full
+    // (not first-home) stamp duty. The loan carries over unchanged.
+    let ownerMoveCost = 0;
+    if (moveEvery > 0 && year > 1 && (year - 1) % moveEvery === 0) {
+      const selling = propertyValue * (propertyInputs.sellingCostRate / 100);
+      const duty = moveStampDuty(propertyInputs.state, propertyValue, year - 1, priceIndex);
+      const otherCosts = propertyInputs.otherPurchaseCosts * priceIndex;
+      const removalists = rentInputs.movingCost * priceIndex;
+      const gain = propertyValue - selling - homeCostBase;
+      const cgt = gain > 0 ? gain * CGT_DISCOUNT * homeCgtRate : 0;
+      ownerMoveCost = selling + duty + otherCosts + removalists + cgt;
+      cumulativeOwnerMoves += ownerMoveCost;
+      homeCostBase = propertyValue + duty + otherCosts;
+    }
+
+    // Salary-sacrifice room under the concessional caps, pre-tax, reset each financial year
+    const superRoom = { buyer: superCapRoom * priceIndex, renter: superCapRoom * priceIndex };
+
+    /**
+     * Invest a saving (after-tax dollars). By default the buyer fills the offset first while
+     * it is smaller than the loan: it earns the mortgage rate, risk-free and untaxed. Then
+     * `superShare` of it is salary-sacrificed into super while working: each after-tax
+     * dollar forgone is 1 / (1 − marginal rate) pre-tax, less 15% contributions tax, up to
+     * the cap room. The rest buys shares.
+     */
+    const invest = (side: 'buyer' | 'renter', amount: number) => {
+      let rest = amount;
+      if (side === 'buyer' && surplusToOffset && balance > offset) {
+        const toOffset = Math.min(rest, balance - offset);
+        offset += toOffset;
+        rest -= toOffset;
+      }
+      if (working && superShare > 0 && rest > 0 && marginalTaxRate < 1) {
+        const preTax = Math.min((rest * superShare) / (1 - marginalTaxRate), superRoom[side]);
+        superRoom[side] -= preTax;
+        const forgone = preTax * (1 - marginalTaxRate);
+        (side === 'buyer' ? buyerSuper : renterSuper).contribute(forgone, preTax * (1 - SUPER_CONTRIBUTIONS_TAX));
+        rest -= forgone;
+      }
+      (side === 'buyer' ? buyer : renter).contribute(rest);
+    };
 
     for (let month = 1; month <= 12; month++) {
       let loanPayment = 0;
@@ -290,23 +390,44 @@ export function runComparison(
 
       const maintenance = propertyValue * (propertyInputs.maintenanceRate / 100 / 12);
       cumulativeMaintenance += maintenance;
-      const ownerCost = loanPayment + maintenance + annualRates / 12 + annualOwnerInsurance / 12;
+      cumulativeStrata += annualStrata / 12;
+      const ownerMoving = month === 1 ? ownerMoveCost : 0;
+      const ownerCost = loanPayment + maintenance + annualRates / 12 + annualStrata / 12 + annualOwnerInsurance / 12 + ownerMoving;
 
       const renterMoving = month === 12 ? movingCost : 0;
       const renterCost = monthlyRent + annualRenterInsurance / 12 + renterMoving;
 
-      // Grow existing holdings, then invest whatever the cheaper option saved this month,
-      // or the share of it that actually gets invested; the rest is spent.
+      // Grow existing holdings
       renter.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
       buyer.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
-      if (ownerCost > renterCost) {
-        const saving = ownerCost - renterCost;
-        renter.contribute(saving * investedShare);
-        renterSpent += saving * (1 - investedShare);
+      renterSuper.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
+      buyerSuper.grow(stockReturn, dividendYield, frankingLevel, reinvestDividends);
+
+      // From pension age, each household gets whatever age pension the means tests allow.
+      // The home is exempt from the assets test; renters also get rent assistance.
+      let buyerIncome = 0;
+      let renterIncome = 0;
+      if (pensionAge) {
+        const buyerAssets = buyer.holdingValue() + offset + buyerSuper.holdingValue();
+        const renterAssets = renter.holdingValue() + renterSuper.holdingValue();
+        buyerIncome = agePension({ assets: buyerAssets, homeowner: true, couple, index: priceIndex }) / 12;
+        renterIncome = agePension({
+          assets: renterAssets, homeowner: false, couple, index: priceIndex,
+          rentAssistance: rentAssistance(monthlyRent, couple, priceIndex),
+        }) / 12;
+        buyerPension += buyerIncome;
+        renterPension += renterIncome;
+      }
+
+      // Both spend the same: whoever comes out ahead this month (lower housing costs, more
+      // pension) invests the difference, or the share of it that actually gets invested.
+      const buyerAhead = renterCost - ownerCost + buyerIncome - renterIncome;
+      if (buyerAhead < 0) {
+        invest('renter', -buyerAhead * investedShare);
+        renterSpent += -buyerAhead * (1 - investedShare);
       } else {
-        const saving = renterCost - ownerCost;
-        buyer.contribute(saving * investedShare);
-        buyerSpent += saving * (1 - investedShare);
+        invest('buyer', buyerAhead * investedShare);
+        buyerSpent += buyerAhead * (1 - investedShare);
       }
       // Offset cash beyond the loan balance saves no interest, so the buyer invests it
       if (offset > balance) {
@@ -359,8 +480,10 @@ const MONETARY_KEYS = [
   'mortgageEquity', 'mortgageTotalPaid', 'mortgagePropertyValue', 'mortgageLoanBalance',
   'mortgageInvestmentValue', 'mortgageNetPosition', 'mortgageNetPositionAfterSale',
   'mortgageMaintenance', 'mortgageRates', 'mortgageInsurance', 'mortgageTotalInterest',
-  'mortgageAnnualCost', 'mortgageContributions', 'mortgageSaleCosts', 'mortgageSpent', 'rentTotalPaid', 'rentMovingCosts', 'rentInsurance',
-  'rentInvestmentValue', 'rentNetPosition', 'rentNetPositionAfterTax', 'rentDividends',
+  'mortgageAnnualCost', 'mortgageContributions', 'mortgageSaleCosts', 'mortgageSpent',
+  'mortgageStrata', 'mortgageMoveCosts', 'mortgageSuperValue', 'mortgagePension',
+  'rentTotalPaid', 'rentMovingCosts', 'rentInsurance',
+  'rentInvestmentValue', 'rentSuperValue', 'rentPension', 'rentNetPosition', 'rentNetPositionAfterTax', 'rentDividends',
   'rentFrankingCredits', 'rentAnnualCost', 'rentContributions', 'rentSpent',
 ] as const satisfies readonly (keyof YearlySnapshot)[];
 

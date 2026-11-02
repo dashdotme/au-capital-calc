@@ -259,9 +259,14 @@ export default function AssumptionsPanel({
           <InputField label="Rent / month" format="currency" value={r.monthlyRent}
             onChange={(monthlyRent) => onPropertyAndRentChange({ ...p, location: undefined }, { ...r, monthlyRent })}
             {...explore('monthlyRent')} />
-          <InputField label="Move every" format="years" value={r.movingFrequency}
+          <InputField label="Renter moves every" format="years" value={r.movingFrequency}
             onChange={(movingFrequency) => onRentChange({ ...r, movingFrequency })} />
         </Pair>
+        <InputField label="Owner moves every" format="years" value={p.ownerMoveFrequency ?? 0}
+          onChange={(ownerMoveFrequency) => onPropertyChange({ ...p, ownerMoveFrequency: Math.max(0, Math.round(ownerMoveFrequency)) })}
+          helpText={(p.ownerMoveFrequency ?? 0) > 0
+            ? `Each move sells and buys a home of the same value: selling costs, stamp duty at full rates${p.state === 'ACT' ? ' (ACT duty assumed to phase out over 15 years)' : ''}, other purchase costs and removalists.`
+            : 'Owners stay put until they sell (0). Sellers hold houses about 9 years on average.'} />
         {scenarioField('Rent growth / year', r.rentIncreaseRate, (rentIncreaseRate) => onRentChange({ ...r, rentIncreaseRate }), 'rentIncreaseRate')}
       </Section>
 
@@ -318,9 +323,14 @@ export default function AssumptionsPanel({
           </span>
         </summary>
         <div className="flex flex-col gap-3.5 px-5 pb-5">
-          <InputField label="Maintenance / year" format="percent" value={p.maintenanceRate}
-            onChange={(maintenanceRate) => onPropertyChange({ ...p, maintenanceRate })}
-            helpText="Share of the property's value." {...explore('maintenanceRate')} />
+          <Pair>
+            <InputField label="Maintenance / year" format="percent" value={p.maintenanceRate}
+              onChange={(maintenanceRate) => onPropertyChange({ ...p, maintenanceRate })}
+              helpText="Share of the property's value." {...explore('maintenanceRate')} />
+            <InputField label="Strata / year" format="currency" value={p.strataLevies ?? 0}
+              onChange={(strataLevies) => onPropertyChange({ ...p, strataLevies: Math.max(0, strataLevies) })}
+              helpText="Apartments and townhouses." />
+          </Pair>
           <Pair>
             <InputField label="Council & water / year" format="currency" value={p.councilRates}
               onChange={(councilRates) => onCityProperty({ councilRates })} />
@@ -370,6 +380,83 @@ export default function AssumptionsPanel({
           </Pair>
           <InputField label="Inflation" format="percent" value={inv.inflationRate}
             onChange={(inflationRate) => onInvestmentChange({ ...inv, inflationRate })} />
+        </div>
+      </details>
+
+      <details className="group border-b border-line">
+        <summary className="flex min-h-13 cursor-pointer list-none items-center justify-between gap-3 px-5 text-sm [&::-webkit-details-marker]:hidden">
+          <span>Super, pension and selling</span>
+          <span className="text-right text-xs text-muted">
+            <span className="group-open:hidden">Age, salary sacrifice, sale tax</span>
+            <span className="hidden group-open:inline">Hide</span>
+          </span>
+        </summary>
+        <div className="flex flex-col gap-3.5 px-5 pb-5">
+          <Pair>
+            <InputField label="Age today" format="years" value={inv.age ?? 35}
+              onChange={(age) => onInvestmentChange({ ...inv, age: Math.max(18, Math.min(100, Math.round(age))) })} />
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[13px] text-ink-2">Household</span>
+              <select
+                className="input-field"
+                value={inv.couple ?? true ? 'couple' : 'single'}
+                onChange={(e) => onInvestmentChange({ ...inv, couple: e.target.value === 'couple' })}
+              >
+                <option value="couple">Couple</option>
+                <option value="single">Single</option>
+              </select>
+            </label>
+          </Pair>
+          <span className="-mt-2 text-xs leading-snug text-muted">
+            From 67 both get the age pension the means tests allow (Sep 2026 rates). The home is exempt from the
+            assets test; renters also get rent assistance.
+          </span>
+          <Pair>
+            <InputField label="Saving into super" format="percent" value={inv.superShare ?? 0}
+              onChange={(superShare) => onInvestmentChange({ ...inv, superShare: Math.min(100, Math.max(0, superShare)) })} />
+            <InputField label="Cap room / year" format="currency" value={inv.superCapRoom ?? 0}
+              onChange={(superCapRoom) => onInvestmentChange({ ...inv, superCapRoom: Math.max(0, superCapRoom) })} />
+          </Pair>
+          <span className="-mt-2 text-xs leading-snug text-muted">
+            Share of invested savings salary-sacrificed until 67, up to the unused concessional cap ($32,500 each
+            less employer super). Taxed 15% going in instead of your rate; tax-free out from 60.
+          </span>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[13px] text-ink-2">Buyer's spare cash</span>
+            <select
+              className="input-field"
+              value={inv.buyerSurplusToOffset ?? true ? 'offset' : 'shares'}
+              onChange={(e) => onInvestmentChange({ ...inv, buyerSurplusToOffset: e.target.value === 'offset' })}
+            >
+              <option value="offset">Offset first, then invest</option>
+              <option value="shares">Invest it</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[13px] text-ink-2">Selling shares</span>
+            <select
+              className="input-field"
+              value={inv.spreadSale ? 'spread' : 'once'}
+              onChange={(e) => onInvestmentChange({ ...inv, spreadSale: e.target.value === 'spread' })}
+            >
+              <option value="once">All at once, at your income tax rate</option>
+              <option value="spread">Gradually, e.g. in retirement</option>
+            </select>
+          </label>
+          {inv.spreadSale && (
+            <>
+              <Pair>
+                <InputField label="Over" format="years" value={inv.saleYears ?? 10}
+                  onChange={(saleYears) => onInvestmentChange({ ...inv, saleYears: Math.max(1, Math.min(40, Math.round(saleYears))) })} />
+                <InputField label="Other income each" format="currency" value={inv.saleIncome ?? 0}
+                  onChange={(saleIncome) => onInvestmentChange({ ...inv, saleIncome: Math.max(0, saleIncome) })} />
+              </Pair>
+              <span className="-mt-2 text-xs leading-snug text-muted">
+                The gain is split evenly across the years{inv.couple ?? true ? ' and both of you' : ''} and taxed
+                through the brackets on top of other income (today's dollars).
+              </span>
+            </>
+          )}
         </div>
       </details>
 

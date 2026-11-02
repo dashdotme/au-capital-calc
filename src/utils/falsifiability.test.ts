@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import type { InvestmentInputs, PropertyInputs, RentInputs, YearlySnapshot } from '../types';
 import { calculateMortgagePayment, runComparison, toRealTerms, upfrontCostsOf, type RatePaths } from './calculations';
 import { createRng } from './distributions';
-import { explainGap } from './gap';
+import { explainGap, offsetOf } from './gap';
+import { AU_STATES } from './stampDuty';
 
 const property: PropertyInputs = {
   propertyPrice: 900000,
@@ -41,6 +42,10 @@ const investment: InvestmentInputs = {
   dividendYield: 1.5,
   frankingLevel: 0,
   dividendReinvestment: true,
+  // Spare cash buys shares and the horizon ends before pension age, so the closed forms below
+  // stay closed; the offset-first rule and the pension have their own tests
+  buyerSurplusToOffset: false,
+  age: 18,
 };
 
 /**
@@ -68,6 +73,7 @@ const MONETARY = [
   'mortgageTotalInterest', 'mortgageAnnualCost', 'mortgageContributions', 'mortgageSaleCosts', 'mortgageSpent',
   'rentTotalPaid', 'rentMovingCosts', 'rentInsurance', 'rentInvestmentValue', 'rentNetPosition', 'rentNetPositionAfterTax',
   'rentDividends', 'rentFrankingCredits', 'rentAnnualCost', 'rentContributions', 'rentSpent',
+  'mortgageStrata', 'mortgageMoveCosts', 'mortgageSuperValue', 'mortgagePension', 'rentSuperValue', 'rentPension',
 ] as const satisfies readonly (keyof YearlySnapshot)[];
 
 /** Relative closeness, with an absolute floor for values near zero. */
@@ -310,6 +316,9 @@ describe('seeded fuzz: identities hold for random scenarios', () => {
       sellingCostRate: between(0, 4), capitalGainsTaxRate: rng() < 0.3 ? between(0, 47) : 0,
       offsetAccountBalance: rng() < 0.5 ? between(0, 300000) : 0, lmi: rng() < 0.3 ? between(0, 40000) : 0,
       firstHomeGrant: rng() < 0.2 ? between(0, 30000) : 0, newHome: rng() < 0.3,
+      strataLevies: rng() < 0.3 ? between(0, 9000) : 0,
+      ownerMoveFrequency: rng() < 0.4 ? Math.round(between(1, 15)) : 0,
+      state: rng() < 0.5 ? AU_STATES[Math.floor(rng() * AU_STATES.length)] : undefined,
     };
     const r: RentInputs = {
       monthlyRent: between(800, 9000), rentIncreaseRate: between(0, 7), movingFrequency: Math.round(between(0, 6)),
@@ -320,6 +329,9 @@ describe('seeded fuzz: identities hold for random scenarios', () => {
       inflationRate: between(0, 5), stockTransactionCost: between(0, 1), dividendYield: between(0, 6),
       frankingLevel: between(0, 100), dividendReinvestment: rng() < 0.7, managementFee: between(0, 1),
       investedShare: rng() < 0.5 ? 100 : between(0, 100),
+      buyerSurplusToOffset: rng() < 0.5, age: Math.round(between(18, 80)), couple: rng() < 0.5,
+      superShare: rng() < 0.5 ? between(0, 100) : 0, superCapRoom: between(0, 80000),
+      spreadSale: rng() < 0.5, saleYears: Math.round(between(1, 20)), saleIncome: between(0, 200000),
     };
     const paths: RatePaths = rng() < 0.5
       ? {
@@ -342,18 +354,21 @@ describe('seeded fuzz: identities hold for random scenarios', () => {
 
   it('keeps the equal-budget identity', () => {
     for (const { p, r, i, years, paths } of scenarios) {
-      // Offset cash moving into shares is not budget, so test without it
+      // Starting offset cash moving into shares is not budget, so test without it. Savings the
+      // buyer parks in the offset are. Pensions are income on top of the budget.
       const results = runComparison({ ...p, offsetAccountBalance: 0 }, r, i, years, paths);
       const s = last(results);
       const buyerOut = results.slice(1).reduce((sum, x) => sum + x.mortgageAnnualCost, 0);
       const renterOut = results.slice(1).reduce((sum, x) => sum + x.rentAnnualCost, 0);
-      expect(near(buyerOut + s.mortgageContributions + s.mortgageSpent,
-        renterOut + s.rentContributions - results[0].rentContributions + s.rentSpent, 1e-9, 1e-3)).toBe(true);
+      expect(near(buyerOut + s.mortgageContributions + offsetOf(s) + s.mortgageSpent - s.mortgagePension,
+        renterOut + s.rentContributions - results[0].rentContributions + s.rentSpent - s.rentPension, 1e-9, 1e-3)).toBe(true);
     }
   });
 
   it('pays the loan off exactly at the end of its term, whatever the rate path', () => {
-    for (const { p, r, i, paths } of scenarios) {
+    for (const { p, r, i: i0, paths } of scenarios) {
+      // Filling the offset pays the loan off early, so test the scheduled repayments alone
+      const i = { ...i0, buyerSurplusToOffset: false };
       const results = runComparison(p, r, i, p.loanTerm, paths);
       expect(last(results).mortgageLoanBalance).toBeLessThan(0.01);
       if ((p.offsetAccountBalance ?? 0) === 0 && p.loanTerm > 1) {
@@ -380,15 +395,19 @@ describe('seeded fuzz: identities hold for random scenarios', () => {
   });
 
   it('scales with money', () => {
-    for (const { p, r, i, years, paths } of scenarios.slice(0, 50)) {
+    for (const { p: p0, r, i: i0, years, paths } of scenarios.slice(0, 50)) {
       const k = 2.5;
+      // Scale-free settings: no pension (means-test thresholds are fixed dollars), no bracket
+      // tax on sales, no state duty schedule, and the super cap scaled along with everything
+      const p = { ...p0, state: undefined };
+      const i = { ...i0, age: 18, spreadSale: false };
       const scaled = runComparison(
-        { ...p, propertyPrice: p.propertyPrice * k, deposit: p.deposit * k, stampDuty: p.stampDuty * k,
+        { ...p, strataLevies: (p.strataLevies ?? 0) * k, propertyPrice: p.propertyPrice * k, deposit: p.deposit * k, stampDuty: p.stampDuty * k,
           otherPurchaseCosts: p.otherPurchaseCosts * k, councilRates: p.councilRates * k, buildingInsurance: p.buildingInsurance * k,
           contentsInsurance: p.contentsInsurance * k, offsetAccountBalance: (p.offsetAccountBalance ?? 0) * k,
           lmi: (p.lmi ?? 0) * k, firstHomeGrant: (p.firstHomeGrant ?? 0) * k },
         { ...r, monthlyRent: r.monthlyRent * k, movingCost: r.movingCost * k, contentsInsurance: r.contentsInsurance * k },
-        i, years, paths);
+        { ...i, superCapRoom: (i.superCapRoom ?? 0) * k }, years, paths);
       const base = runComparison(p, r, i, years, paths);
       const s = last(scaled);
       const b = last(base);

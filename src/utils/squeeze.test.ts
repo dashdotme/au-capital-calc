@@ -57,14 +57,17 @@ describe('household simulation', () => {
   const paths = buildSqueezePaths(P, R, I, 30, central);
 
   it('matches the engine when income is not a constraint', () => {
-    const engine = runComparison(P, R, I, 30, paths);
+    // The household simulation doesn't fill the offset first (see household.ts)
+    const engine = runComparison(P, R, { ...I, buyerSurplusToOffset: false }, 30, paths);
     const rich = simulateHousehold(P, R, I, 30, paths, { grossIncome: 2_000_000, takeHome: 0.75, livingCosts: 0 }, { growth: paths.wages, spells: [] });
     for (const year of [1, 10, 30]) expect(rich.gap[year]).toBeCloseTo(gapAt(engine, year), -2);
   });
 
   it('income level alone does not change the gap while nobody is constrained', () => {
+    // Without owner moves: a move's lump-sum cost can exceed a month's surplus and force share
+    // sales, which is a real constraint that depends on income
     const run = (grossIncome: number) =>
-      simulateHousehold(P, R, I, 30, paths, { grossIncome, takeHome: 0.75, livingCosts: 4500 }, { growth: paths.wages, spells: [] });
+      simulateHousehold({ ...P, ownerMoveFrequency: 0 }, R, I, 30, paths, { grossIncome, takeHome: 0.75, livingCosts: 4500 }, { growth: paths.wages, spells: [] });
     expect(run(400000).gap[30]).toBeCloseTo(run(250000).gap[30], -2);
   });
 
