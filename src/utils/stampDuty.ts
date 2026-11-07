@@ -193,6 +193,47 @@ export function calculateStampDuty(state: AuState, price: number, firstHomeBuyer
   return Math.round(Math.max(0, duty));
 }
 
+// Investors pay general rates. They match the owner-occupier schedules above except in:
+// - QLD: general transfer duty rates (QRO "Transfer duty rates", read 7 Nov 2026), no home
+//   concession: nil to $5k, then $1.50 / $3.50 / $4.50 / $5.75 per $100 over $5k / $75k /
+//   $540k / $1m.
+// - VIC: general rates without the principal place of residence concession (SRO): $2,870 plus
+//   6% over $130k up to $960k, then the same 5.5% and $2m+ bands as above.
+// - ACT: rates for a transaction that is not an eligible owner occupier transaction (Taxation
+//   Administration (Amounts Payable—Duty) Determination 2026, DI2026-155, Table 2).
+const QLD_GENERAL: Bracket[] = [
+  [0, 0, 0],
+  [5000, 0, 0.015],
+  [75000, 1050, 0.035],
+  [540000, 17325, 0.045],
+  [1000000, 38025, 0.0575],
+];
+
+const VIC_GENERAL: Bracket[] = [
+  [0, 0, 0.014],
+  [25000, 350, 0.024],
+  [130000, 2870, 0.06],
+];
+
+const ACT_NON_OWNER: Bracket[] = [
+  [0, 0, 0.012],
+  [200000, 2400, 0.022],
+  [300000, 4600, 0.034],
+  [500000, 11400, 0.0432],
+  [750000, 22200, 0.059],
+  [1000000, 36950, 0.064],
+];
+
+/** Duty on a residential investment property (general / non-owner-occupier rates). */
+export function investorStampDuty(state: AuState, value: number): number {
+  let duty: number;
+  if (state === 'QLD') duty = scale(QLD_GENERAL, value);
+  else if (state === 'VIC') duty = value > 960000 ? vic(value) : scale(VIC_GENERAL, value);
+  else if (state === 'ACT') duty = value > 1455000 ? 0.0454 * value : scale(ACT_NON_OWNER, value);
+  else duty = STAMP_DUTY_RULES[state].standard(value);
+  return Math.round(Math.max(0, duty));
+}
+
 /** One line describing how the stamp duty figure was worked out. */
 export function stampDutyBasis(state: AuState | undefined, firstHomeBuyer: boolean): string {
   if (!state) return 'Entered manually. Pick a state to calculate it from the price.';

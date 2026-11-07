@@ -29,6 +29,10 @@ import SentenceView from './components/SentenceView';
 import LedgerTable from './components/LedgerTable';
 import GuidedFlow from './components/GuidedFlow';
 import SqueezeView from './components/SqueezeView';
+import InvestCalculator from './components/InvestCalculator';
+import Segmented from './components/Segmented';
+import PageMenu from './components/PageMenu';
+import HousingExplainer from './components/HousingExplainer';
 import SiteFooter from './components/SiteFooter';
 import PriceToIncomeCallout from './components/PriceToIncomeCallout';
 import { priceToIncome } from './utils/priceToIncome';
@@ -40,13 +44,16 @@ import SavedScenarios, { type SavedScenario } from './components/SavedScenarios'
 import PrintReport from './components/PrintReport';
 import PortfolioComparison from './components/PortfolioComparison';
 import { PORTFOLIOS, applyPortfolio } from './portfolios';
-import { decodeState, encodeState, type SharedState } from './utils/shareState';
+import {
+  DEFAULT_STATE, buildHash, decodeInvestState, decodeState, defaultInvestState, encodeInvestState, encodeState, parseHash,
+  type InvestState, type Mode, type Page, type SharedState,
+} from './utils/shareState';
 import { withPurchaseCosts } from './utils/homeBuyerSupport';
 
-type View = 'simple' | 'ledger' | 'squeeze' | 'risk';
-type MainView = Exclude<View, 'risk'>;
+type View = Mode | 'risk';
 
 const VIEW_KEY = 'rent-or-buy.view';
+const PAGE_TITLES: Record<Page, string> = { buy: 'Rent or Buy', invest: 'Property or Shares', learn: 'The Long Run' };
 /** Set once someone finds the AI Squeeze through the corner easter egg */
 const SQUEEZE_UNLOCKED_KEY = 'rent-or-buy.squeeze-unlocked';
 const THEME_KEY = 'rent-or-buy.theme';
@@ -68,17 +75,6 @@ function writePref(key: string, value: string) {
   }
 }
 
-const DEFAULT_STATE: SharedState = {
-  property: DEFAULT_PROPERTY,
-  rent: DEFAULT_RENT,
-  investment: DEFAULT_INVESTMENT,
-  horizon: DEFAULT_HORIZON,
-  sellYear: null,
-  scenarioMode: true,
-  realTerms: false,
-  income: null,
-};
-
 const SAVED_KEY = 'rent-or-buy.saved.v1';
 
 /** Saved scenarios live in localStorage as share-link payloads, so they get the same validation. */
@@ -86,7 +82,7 @@ function loadSaved(): SavedScenario[] {
   try {
     const raw = JSON.parse(localStorage.getItem(SAVED_KEY) ?? '[]') as { id: string; name: string; hash: string }[];
     return raw.flatMap((item) => {
-      const state = decodeState(`#${item.hash}`, DEFAULT_STATE);
+      const state = decodeState(item.hash, DEFAULT_STATE);
       return state && typeof item.name === 'string' ? [{ id: String(item.id), name: item.name, state }] : [];
     });
   } catch {
@@ -109,35 +105,6 @@ interface ChangeFlash {
   at: number;
 }
 
-function Segmented<T extends string | boolean>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div role="group" aria-label={label} className="flex rounded-lg border border-line bg-surface p-[3px]">
-      {options.map((option) => (
-        <button
-          key={String(option.value)}
-          type="button"
-          aria-pressed={value === option.value}
-          onClick={() => onChange(option.value)}
-          className={`min-h-9 rounded-md px-2.5 text-[13px] sm:px-3.5 ${
-            value === option.value ? 'bg-line font-semibold text-ink' : 'text-ink-2 hover:text-ink'
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /**
  * Easter egg: hovering the very bottom-right corner (desktop) slides out a handwritten note
@@ -200,8 +167,13 @@ function SqueezeEgg({ onOpen }: { onOpen: () => void }) {
 }
 
 export default function RentVsMortgageCalculator() {
-  // A shared link (#s=…) restores someone else's scenario; otherwise start from defaults
-  const [initial] = useState(() => decodeState(window.location.hash, DEFAULT_STATE) ?? DEFAULT_STATE);
+  // A shared link (#rent-or-buy?price=…, or an old #s=…) restores someone else's scenario
+  const [link] = useState(() => parseHash(window.location.hash));
+  const [initial] = useState(() =>
+    (link.page === 'buy' ? decodeState(window.location.hash, DEFAULT_STATE) : null) ?? DEFAULT_STATE);
+  const [page, setPage] = useState<Page>(link.page ?? 'buy');
+  const [investState, setInvestState] = useState<InvestState>(() =>
+    link.page === 'invest' ? decodeInvestState(link.params) : defaultInvestState());
   const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>(() => withPurchaseCosts(initial.property));
   const [rentInputs, setRentInputs] = useState<RentInputs>(initial.rent);
   const [investmentInputs, setInvestmentInputs] = useState<InvestmentInputs>(initial.investment);
@@ -214,9 +186,11 @@ export default function RentVsMortgageCalculator() {
   const [changeFlash, setChangeFlash] = useState<ChangeFlash | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [focusMetric, setFocusMetric] = useState<string | null>(null);
-  const [mainView, setMainView] = useState<MainView>(() => readPref<MainView>(VIEW_KEY, ['simple', 'ledger', 'squeeze'], 'simple'));
+  const [mainView, setMainView] = useState<Mode>(() => link.mode ?? readPref<Mode>(VIEW_KEY, ['simple', 'ledger', 'squeeze'], 'simple'));
   const [showRisk, setShowRisk] = useState(false);
-  const view: View = showRisk ? 'risk' : mainView;
+  const view: View = showRisk && page === 'buy' ? 'risk' : mainView;
+  /** Property or shares has Simple and Ledger only */
+  const investView = mainView === 'ledger' ? 'ledger' : 'simple';
   const [theme, setTheme] = useState<Theme>(() => readPref<Theme>(THEME_KEY, ['light', 'dark'], 'light'));
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -230,7 +204,13 @@ export default function RentVsMortgageCalculator() {
     () => mainView === 'squeeze' || readPref(SQUEEZE_UNLOCKED_KEY, ['yes', 'no'], 'no') === 'yes'
   );
 
-  const switchView = (next: MainView) => {
+  const switchPage = (next: Page) => {
+    setPage(next);
+    setShowRisk(false);
+    window.scrollTo({ top: 0 });
+  };
+
+  const switchView = (next: Mode) => {
     setMainView(next);
     setShowRisk(false);
     writePref(VIEW_KEY, next);
@@ -256,10 +236,12 @@ export default function RentVsMortgageCalculator() {
     realTerms,
     income,
   };
-  const currentHash = encodeState(currentState);
+  // The address bar always holds a link to what's on screen, readable and without defaults
+  const query = page === 'buy' ? encodeState(currentState) : page === 'invest' ? encodeInvestState(investState) : '';
+  const hash = buildHash(page, mainView, query);
   useEffect(() => {
-    window.history.replaceState(null, '', `#${currentHash}`);
-  }, [currentHash]);
+    window.history.replaceState(null, '', hash ? `#${hash}` : window.location.pathname + window.location.search);
+  }, [hash]);
 
   // Heavy derived views (break-even search, scenarios, portfolio comparison) follow a
   // deferred copy of the inputs so typing stays responsive on slower devices.
@@ -524,7 +506,7 @@ export default function RentVsMortgageCalculator() {
 
   return (
     <ThemeContext.Provider value={theme}>
-      <div className={`min-h-screen bg-ground text-ink print:hidden ${view === 'ledger' ? 'pb-24 lg:pb-0' : ''}`}>
+      <div className={`min-h-screen bg-ground text-ink print:hidden ${view === 'ledger' && page !== 'learn' ? 'pb-24 lg:pb-0' : ''}`}>
         <header className="border-b border-line">
           <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
             <div className="flex min-h-11 items-center gap-3">
@@ -537,7 +519,9 @@ export default function RentVsMortgageCalculator() {
                   ← Back
                 </button>
               )}
-              <span className="text-lg font-bold tracking-tight sm:text-xl">{view === 'risk' ? 'Risk' : 'Rent or Buy'}</span>
+              {view === 'risk'
+                ? <span className="text-lg font-bold tracking-tight sm:text-xl">Risk</span>
+                : <PageMenu page={page} titles={PAGE_TITLES} onSelect={switchPage} />}
               {view === 'risk' && (
                 <span className="hidden text-[13px] text-ink-2 md:inline">
                   {MONTE_CARLO_ITERATIONS.toLocaleString('en-AU')} simulated futures · baseline assumptions
@@ -555,16 +539,16 @@ export default function RentVsMortgageCalculator() {
                 >
                   {monteCarloRunning ? 'Running…' : 'Re-run'}
                 </button>
-              ) : (
+              ) : page !== 'learn' && (
                 <Segmented
                   label="View"
-                  value={mainView}
+                  value={page === 'invest' ? investView : mainView}
                   onChange={switchView}
                   options={[
                     { value: 'simple', label: 'Simple' },
                     { value: 'ledger', label: 'Ledger' },
                     // Hidden until found through the corner easter egg, then kept
-                    ...(squeezeUnlocked ? [{ value: 'squeeze' as const, label: 'AI Squeeze' }] : []),
+                    ...(squeezeUnlocked && page === 'buy' ? [{ value: 'squeeze' as const, label: 'AI Squeeze' }] : []),
                   ]}
                 />
               )}
@@ -576,17 +560,22 @@ export default function RentVsMortgageCalculator() {
               >
                 {themeIcon}
               </button>
+              {page !== 'learn' && (
               <button type="button" onClick={copyLink} aria-label={linkCopied ? 'Link copied' : 'Copy link to this scenario'}
                 className={`${iconButton} sm:w-auto sm:min-w-[7.25rem] sm:gap-2 sm:px-3 sm:text-[13px]`}>
                 {/* Wide enough for "Copy link", so switching to "Copied" doesn't shift the header */}
                 {linkIcon}
                 <span className="hidden sm:inline" aria-live="polite">{linkCopied ? 'Copied' : 'Copy link'}</span>
               </button>
+              )}
+              {/* The PDF report covers rent or buy only */}
+              {page === 'buy' && (<>
               <button type="button" onClick={() => window.print()} aria-label="Export PDF"
                 className={`${iconButton} sm:w-auto sm:gap-2 sm:px-3 sm:text-[13px]`}>
                 {printIcon}
                 <span className="hidden sm:inline">Export PDF</span>
               </button>
+              </>)}
             </div>
           </div>
         </header>
@@ -604,7 +593,7 @@ export default function RentVsMortgageCalculator() {
           </main>
         )}
 
-        {view === 'simple' && (
+        {page === 'buy' && view === 'simple' && (
           <SentenceView
             property={propertyInputs}
             rent={rentInputs}
@@ -637,7 +626,15 @@ export default function RentVsMortgageCalculator() {
           />
         )}
 
-        {view === 'squeeze' && (
+        {page === 'invest' && (
+          <InvestCalculator state={investState} onChange={setInvestState} view={investView} onOpenLearn={() => switchPage('learn')} />
+        )}
+
+        {page === 'learn' && (
+          <HousingExplainer onOpenInvest={() => switchPage('invest')} onOpenCalculator={() => switchPage('buy')} />
+        )}
+
+        {page === 'buy' && view === 'squeeze' && (
           <SqueezeView
             property={propertyInputs}
             rent={rentInputs}
@@ -650,7 +647,7 @@ export default function RentVsMortgageCalculator() {
           />
         )}
 
-        {view === 'ledger' && (
+        {page === 'buy' && view === 'ledger' && (
           <div className="mx-auto grid max-w-[1360px] grid-cols-1 items-start gap-6 px-4 pt-6 pb-10 sm:px-6 lg:grid-cols-[minmax(340px,390px)_minmax(0,1fr)]">
             <div className="order-2 lg:sticky lg:top-6 lg:order-1 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:rounded-xl">
               {assumptionsPanel}
@@ -713,23 +710,24 @@ export default function RentVsMortgageCalculator() {
         )}
 
         <SiteFooter />
-        {!squeezeUnlocked && !showRisk && <SqueezeEgg onOpen={() => { switchView('squeeze'); window.scrollTo(0, 0); }} />}
+        {!squeezeUnlocked && !showRisk && page === 'buy' && <SqueezeEgg onOpen={() => { switchView('squeeze'); window.scrollTo(0, 0); }} />}
 
-        {view === 'ledger' && (
+        {page === 'buy' && view === 'ledger' && (
           <div className="fixed inset-x-0 bottom-0 z-10 flex gap-2.5 border-t border-line bg-ground/95 px-4 pt-3 pb-5 backdrop-blur lg:hidden">
-            <a
-              href="#assumptions"
-              className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-ink text-[15px] font-semibold text-ground no-underline"
+            <button
+              type="button"
+              onClick={() => document.getElementById('assumptions')?.scrollIntoView({ behavior: 'smooth' })}
+              className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-ink text-[15px] font-semibold text-ground"
             >
               Edit assumptions
-            </a>
+            </button>
             <button type="button" onClick={openRisk} className="min-h-12 rounded-xl border border-line-strong bg-surface px-4 text-sm font-semibold">
               Risk
             </button>
           </div>
         )}
 
-        {assumptionsOpen && view === 'simple' && (
+        {assumptionsOpen && page === 'buy' && view === 'simple' && (
           <div className="fixed inset-0 z-40 flex justify-end">
             <button type="button" aria-label="Close assumptions" onClick={() => setAssumptionsOpen(false)} className="absolute inset-0 bg-black/30" />
             <div role="dialog" aria-modal="true" aria-label="All assumptions"

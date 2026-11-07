@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AU Capital Calc is a financial calculator comparing renting vs buying property in Australia. It models long-term wealth outcomes by simulating mortgage payments, property appreciation, investment returns, and Australian tax implications including franking credits and capital gains tax.
+AU Capital Calc is a set of Australian financial calculators: renting vs buying a home (the main one), an investment property vs a share ETF, and an explainer on long-run house prices. It models long-term wealth outcomes by simulating mortgage payments, property appreciation, investment returns, and Australian tax implications including franking credits and capital gains tax.
 
 ## Common Commands
 
@@ -12,7 +12,7 @@ AU Capital Calc is a financial calculator comparing renting vs buying property i
 - `npm run build` - Type-check with TypeScript and build for production
 - `npm run lint` - Run ESLint on the codebase
 - `npm run preview` - Preview production build locally
-- `npm test` - Run engine invariant tests (`src/utils/calculations.test.ts`), falsification tests (`src/utils/falsifiability.test.ts`: closed-form oracles, accounting identities, metamorphic relations, seeded fuzz) and retirement/move tests (`src/utils/retirement.test.ts`, checked against published Services Australia and ATO figures)
+- `npm test` - Run engine invariant tests (`src/utils/calculations.test.ts`), falsification tests (`src/utils/falsifiability.test.ts`: closed-form oracles, accounting identities, metamorphic relations, seeded fuzz) retirement/move tests (`src/utils/retirement.test.ts`, checked against published Services Australia and ATO figures) and investment property tests (`src/utils/investmentProperty.test.ts`, checked against the Budget 2026–27 tax explainer cameo, QRO's duty example and the state land tax schedules) and share-link tests (`src/utils/shareState.test.ts`)
 
 ## Architecture
 
@@ -54,10 +54,13 @@ The application follows a unidirectional data flow:
 
 ### Component Structure
 
-- `RentVsMortgageCalculator.tsx` - Root: all state, derived results, URL/localStorage sync, theme, and the three views
+- `RentVsMortgageCalculator.tsx` - Root: all state, derived results, URL sync, theme, pages and views. The header title is a menu (`PageMenu.tsx`) switching between the two calculators (Rent or Buy, Property or Shares) and the Learn page; Simple / Ledger applies to both calculators
+- **Links** (`utils/shareState.ts`): the hash names the page and view and holds only values that differ from the defaults, e.g. `#rent-or-buy/ledger?city=sydney&deposit=250k`, `#property-or-shares?kind=established&price=700k`. A city or share preset is written by name and the rest diffed against it; derived figures (stamp duty, grant, estimated LMI) are left out. Plain rent-or-buy with defaults has no hash. Old `#s=<base64>` links, and saved scenarios stored that way, still decode. Every key is listed in `BUY_FIELDS` / `INVEST_FIELDS`; untrusted values are type-checked and clamped
 - **Simple view** (default): `SentenceView.tsx` - the scenario as an editable sentence (`SentencePill.tsx` popovers), a plain-language answer from `utils/narrative.ts`, an "if you sold earlier" chart, why-cards and optional panels; `GuidedFlow.tsx` is the opt-in four-question first-visit flow
 - **Ledger view**: `AssumptionsPanel.tsx` sidebar plus `LedgerTable.tsx` (line-by-line buy vs rent at the sell year), `KeyFigures`, `OutcomeChart`, `FocusAnalysis` (Explore), `FlipList`
 - **Risk view**: `RiskView.tsx` (Monte Carlo, run in `utils/monteCarlo.worker.ts`)
+- **Property or Shares** (`#property-or-shares`): `InvestCalculator.tsx` (container, Ledger view, ledger/sensitivity/caveat cards), `InvestSentenceView.tsx` (Simple view: the scenario as a sentence, the answer, a "What decides it" card for price growth, rent increases, interest rate and share returns, a chart of the lead by sale year shaded for growth ±1 point, why-cards) and `InvestAssumptions.tsx`, over `utils/investmentProperty.ts`, a separate monthly model of a geared rental vs a share ETF for one salaried investor. Same equal-budget rule (the property's after-tax shortfall is invested by the shares side; its surplus goes into a side ETF). Models the 2026–27 Budget reforms (law) from 1 Jul 2027: CGT indexation with a 30% minimum tax on real gains (pre-Jul-2027 gains keep the 50% discount; ETF parcels tracked by purchase date), negative gearing only for new builds (established-home losses are quarantined and carried forward against rent and the gain), and the new-build choice of the 50% discount. `rules: 'old'` switches to the pre-reform rules for comparison. Investor stamp duty is `investorStampDuty()` (general rates); house-and-land pays duty on the land only. Land tax is `utils/landTax.ts` (2026–27 schedules per state, on the land's share of the value; SA thresholds follow land values, ACT charges follow inflation, the rest stay put). Loans are interest-only for `ioYears` then P&I over the rest of 30 years; LMI above 80% is added to the loan; new builds take the same first-10-years growth drag as rent-or-buy; while a new build is under construction, interest, council rates and land tax aren't deductible and go into the cost base. Inputs live in the link.
+- **Learn page** (`#learn`): `HousingExplainer.tsx`, a static explainer (borrowing power vs rates, price-to-income arithmetic, land vs buildings, housing vs shares) with its sources listed in the file header
 - Shared cards: `GapExplainer`, `PortfolioComparison`, `Affordability`, `SavedScenarios`; `PrintReport.tsx` renders only when printing (Export PDF)
 - `chartTheme.ts` - light/dark palettes; charts read colours through `useChart()` and `ThemeContext`, CSS tokens switch on `html[data-theme]`
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceLine, XAxis, YAxis } from 'recharts';
 import type { BreakEvenResult, MonteCarloResults, ScenarioResults, ScenarioValue, YearlySnapshot } from '../types';
-import { encodeState, type SharedState } from '../utils/shareState';
+import { buildHash, encodeState, type SharedState } from '../utils/shareState';
 import { calculateMortgagePayment, isScenarioValue, resolveScenarioValue, upfrontCostsOf, NEW_HOME_DRAG_YEARS, NEW_HOME_GROWTH_DRAG } from '../utils/calculations';
 import { explainGap, offsetOf } from '../utils/gap';
 import { flipDistance, formatMetricValue } from '../utils/flip';
@@ -141,7 +141,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
   ];
   const half = Math.ceil(assumptions.length / 2);
   // Built from state rather than location.href, which may not carry the hash yet
-  const shareLink = `${window.location.origin}${window.location.pathname}#${encodeState(state)}`;
+  const shareLink = `${window.location.origin}${window.location.pathname}#${buildHash('buy', 'ledger', encodeState(state))}`;
   const values = chartData.flatMap((d) => [d.base, d.pes, d.opt]).filter((v): v is number => v !== undefined);
   const ticks = niceTicks(Math.min(0, ...values), Math.max(0, ...values));
 
