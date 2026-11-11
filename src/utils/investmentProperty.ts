@@ -41,9 +41,10 @@ import { investorStampDuty, type AuState } from './stampDuty';
 import { estimateLmi } from './homeBuyerSupport';
 import { landTax } from './landTax';
 import { NEW_HOME_DRAG_YEARS, NEW_HOME_GROWTH_DRAG } from './calculations';
+import { MINIMUM_GAIN_TAX, monthsUntilReform, type TaxRules } from './cgtReform';
 
+export { monthsUntilReform, type TaxRules };
 export type IpKind = 'new' | 'established';
-export type TaxRules = 'reform' | 'old';
 
 export interface IpInputs {
   kind: IpKind;
@@ -139,8 +140,6 @@ export interface IpResult {
 const CAPITAL_WORKS_RATE = 0.025;
 /** Rough: average effective life of a new rental's fittings, for diminishing value (rate 2 ÷ life) */
 const PLANT_LIFE = 8;
-/** Minimum tax on real capital gains from 1 Jul 2027 */
-const MINIMUM_GAIN_TAX = 0.3;
 const COMPANY_TAX = 0.3;
 
 /** Income tax with brackets scaled by `cpi` (today's-dollar brackets × price level). */
@@ -427,10 +426,6 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
   return { startingCash, stampDuty, lmi, loan, years };
 }
 
-/** Months from `today` until 1 Jul 2027, when the reforms start (≤ 0 once it has passed). */
-export function monthsUntilReform(today: Date): number {
-  return (2027 - today.getFullYear()) * 12 + (6 - today.getMonth());
-}
 
 /** Property growth (% a year) at which the property and shares finish level, by bisection. */
 export function breakEvenGrowth(input: IpInputs): number | null {

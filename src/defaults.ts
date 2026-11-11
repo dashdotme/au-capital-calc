@@ -96,6 +96,9 @@ export const DEFAULT_INVESTMENT: InvestmentInputs = applyPortfolio(
     // retirement with no other taxable income
     saleYears: 10,
     saleIncome: 0,
+    // Law from 1 Jul 2027 (2026–27 Budget; see utils/cgtReform.ts): CPI indexation and a 30%
+    // minimum tax on shares' real gains, the 50% discount kept for gains before then
+    cgtRules: 'reform',
   },
   defaultPortfolio
 );

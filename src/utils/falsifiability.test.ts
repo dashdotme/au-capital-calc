@@ -46,6 +46,8 @@ const investment: InvestmentInputs = {
   // stay closed; the offset-first rule and the pension have their own tests
   buyerSurplusToOffset: false,
   age: 18,
+  // 1 Jul 2027 counted from Nov 2026, fixed so results don't depend on today's date
+  monthsToReform: 8,
 };
 
 /**
@@ -152,11 +154,37 @@ describe('closed-form oracles', () => {
   it('charges brokerage on the way in and out and discounted CGT on the gain only', () => {
     const fee = 0.004;
     const tax = 0.45;
-    const s = last(runComparison(balanced.property, balanced.rent, { ...balanced.investment, stockTransactionCost: 0.4, marginalTaxRate: 45 }, 15));
+    const s = last(runComparison(balanced.property, balanced.rent, { ...balanced.investment, stockTransactionCost: 0.4, marginalTaxRate: 45, cgtRules: 'old' }, 15));
     const value = 180000 * (1 - fee) * 1.07 ** 15;
     const proceeds = value * (1 - fee);
     expect(s.rentInvestmentValue).toBeCloseTo(value, 4);
     expect(s.rentNetPositionAfterTax).toBeCloseTo(proceeds - (proceeds - 180000) * 0.5 * tax, 4);
+  });
+
+  it('indexes the share cost base under the 2027 rules and taxes the whole real gain', () => {
+    // In force from the start: no discount, cost base grown by inflation
+    const run = (rate: number, monthsToReform = 0) => last(runComparison(balanced.property, balanced.rent, {
+      ...balanced.investment, inflationRate: 2.5, marginalTaxRate: rate, monthsToReform,
+    }, 15));
+    const value = 180000 * 1.07 ** 15;
+    const real = value - 180000 * 1.025 ** 15;
+    expect(run(45).rentNetPositionAfterTax).toBeCloseTo(value - 0.45 * real, 4);
+    // Below 30% the minimum tax applies
+    expect(run(20).rentNetPositionAfterTax).toBeCloseTo(value - 0.3 * real, 4);
+    // Starting after 2 years: the gain to then keeps the discount; the value then is the new cost base
+    const atReform = 180000 * 1.07 ** 2;
+    const tax = 0.45 * (0.5 * (atReform - 180000) + value - atReform * 1.025 ** 13);
+    expect(run(45, 24).rentNetPositionAfterTax).toBeCloseTo(value - tax, 4);
+  });
+
+  it('exempts age pensioners from the 30% minimum tax', () => {
+    const inv = { ...balanced.investment, inflationRate: 2.5, marginalTaxRate: 0, monthsToReform: 0, couple: false };
+    // At 0% tax only the floor taxes the gain: working-age sellers pay 30%, pensioners nothing
+    const young = last(runComparison(balanced.property, balanced.rent, { ...inv, age: 30 }, 10));
+    expect(young.rentNetPositionAfterTax).toBeLessThan(young.rentNetPosition);
+    const old = last(runComparison(balanced.property, balanced.rent, { ...inv, age: 70 }, 10));
+    expect(old.rentPension).toBeGreaterThan(0);
+    expect(old.rentNetPositionAfterTax).toBeCloseTo(old.rentNetPosition, 6);
   });
 
   it('taxes reinvested dividends with franking credits at the predicted monthly rate', () => {
@@ -177,7 +205,7 @@ describe('closed-form oracles', () => {
   });
 
   it('passes stamp duty through as the renter\'s extra capital, compounded and taxed on the gain', () => {
-    const base = { ...balanced.investment, marginalTaxRate: 30 };
+    const base = { ...balanced.investment, marginalTaxRate: 30, cgtRules: 'old' as const };
     const without = last(runComparison(balanced.property, balanced.rent, base, 12));
     const withDuty = last(runComparison({ ...balanced.property, stampDuty: 50000 }, balanced.rent, base, 12));
     const grown = 50000 * 1.07 ** 12;

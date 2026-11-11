@@ -1,3 +1,4 @@
+import { MINIMUM_GAIN_TAX, monthsUntilReform } from './cgtReform';
 import type { PropertyInputs, RentInputs, InvestmentInputs, YearlySnapshot, ScenarioValue, ScenarioResults } from '../types';
 import { moveStampDuty } from './stampDuty';
 import {
@@ -66,7 +67,12 @@ export interface RatePaths {
  * Share portfolio with an ATO-style cost base. Brokerage is paid on every buy and on
  * the final sale; dividends are taxed at `taxRate` with franking credits offsetting tax
  * (and refunded if they exceed it). `taxableGainShare` is the part of a capital gain that
- * is taxed: half for individuals, two-thirds for a super fund.
+ * is taxed under the discount: half for individuals, two-thirds for a super fund.
+ *
+ * With `indexed`, capital gains follow the 2027 reform once `startReform()` is called: the
+ * gain so far keeps the discount (`lockedTaxable`), and later gains are taxed in full after
+ * indexing the cost base to `cpi`, at no less than 30% unless `floorExempt`. Sales are
+ * proportional across holdings, so one indexed cost base (in base-period dollars) is exact.
  */
 export class Portfolio {
   value = 0;
@@ -76,14 +82,25 @@ export class Portfolio {
   frankingCredits = 0;
   /** New money put in (excludes reinvested dividends), so growth = value - contributions */
   contributions = 0;
+  /** Price level now (1 = the start); set by the simulation each month */
+  cpi = 1;
+  /** Recipients of means-tested payments don't pay the 30% minimum tax */
+  floorExempt = false;
+  private reformed = false;
+  /** Cost base deflated to base-period dollars, for indexation (reform only) */
+  private realCost = 0;
+  /** Already-discounted gain from before the reform (can be negative: a loss) */
+  private lockedTaxable = 0;
   private readonly feeRate: number;
   private readonly taxRate: number;
   private readonly taxableGainShare: number;
+  private readonly indexed: boolean;
 
-  constructor(feeRate: number, taxRate: number, taxableGainShare = CGT_DISCOUNT) {
+  constructor(feeRate: number, taxRate: number, taxableGainShare = CGT_DISCOUNT, indexed = false) {
     this.feeRate = feeRate;
     this.taxRate = taxRate;
     this.taxableGainShare = taxableGainShare;
+    this.indexed = indexed;
   }
 
   /**
@@ -100,6 +117,19 @@ export class Portfolio {
     if (amount <= 0) return;
     this.value += amount * (1 - this.feeRate);
     this.costBase += amount;
+    this.realCost += amount / this.cpi;
+  }
+
+  /**
+   * 1 Jul 2027: the gain so far keeps the discount, and the holdings' value becomes the
+   * cost base for the rest (ATO). No-op unless the portfolio is `indexed`.
+   */
+  startReform() {
+    if (!this.indexed || this.reformed) return;
+    this.reformed = true;
+    this.lockedTaxable = (this.value - this.costBase) * this.taxableGainShare;
+    this.costBase = this.value;
+    this.realCost = this.value / this.cpi;
   }
 
   /** One month of price growth plus dividends. Rates are annual decimals. */
@@ -129,8 +159,33 @@ export class Portfolio {
   }
 
   /**
-   * Sell enough to raise `needed` in cash after brokerage and discounted CGT (cash held
-   * first). Returns the amount actually raised, which is less if the portfolio runs out.
+   * Taxable gain if everything were sold now: `discounted` is taxed as income, `real` (the
+   * indexed gain after the reform) as income but at least 30%. A loss on one part offsets
+   * the other (the discounted part counts at its pre-discount size).
+   */
+  private gains(): { discounted: number; real: number } {
+    const proceeds = this.value * (1 - this.feeRate);
+    if (!this.reformed) return { discounted: Math.max(0, proceeds - this.costBase) * this.taxableGainShare, real: 0 };
+    const real = proceeds - this.realCost * this.cpi;
+    const locked = this.lockedTaxable;
+    if (locked < 0) return { discounted: 0, real: Math.max(0, real + locked / this.taxableGainShare) };
+    if (real < 0) return { discounted: Math.max(0, locked + real * this.taxableGainShare), real: 0 };
+    return { discounted: locked, real };
+  }
+
+  /** CGT on selling everything now; `gainTax` turns a taxable gain into tax (default: flat `taxRate`). */
+  private saleTax(gainTax: (taxableGain: number) => number = (g) => g * this.taxRate): number {
+    const { discounted, real } = this.gains();
+    const tax = (g: number) => (g > 0 ? gainTax(g) : 0);
+    const total = tax(discounted + real);
+    if (real <= 0 || this.floorExempt) return total;
+    return Math.max(total, tax(discounted) + MINIMUM_GAIN_TAX * real);
+  }
+
+  /**
+   * Sell enough to raise `needed` in cash after brokerage and CGT (cash held first), selling
+   * an even slice of every holding. Returns the amount actually raised, which is less if the
+   * portfolio runs out.
    */
   withdraw(needed: number): number {
     if (needed <= 0) return 0;
@@ -138,26 +193,30 @@ export class Portfolio {
     this.cash -= fromCash;
     let remaining = needed - fromCash;
     if (remaining <= 0 || this.value <= 0) return fromCash;
-    const costShare = this.costBase / this.value;
-    const gainPerDollar = Math.max(0, 1 - this.feeRate - costShare);
-    const netPerDollar = 1 - this.feeRate - gainPerDollar * this.taxableGainShare * this.taxRate;
+    const netPerDollar = 1 - this.feeRate - this.saleTax() / this.value;
     const sold = Math.min(this.value, remaining / netPerDollar);
-    this.costBase -= costShare * sold;
+    const kept = 1 - sold / this.value;
+    this.costBase *= kept;
+    this.realCost *= kept;
+    this.lockedTaxable *= kept;
     this.value -= sold;
     remaining -= sold * netPerDollar;
     return needed - remaining;
   }
 
-  /**
-   * Value if everything were sold today, after brokerage and discounted CGT. `gainTax` turns
-   * the taxable (discounted) gain into tax; by default it's taxed at the flat `taxRate`.
-   */
+  /** Value if everything were sold today, after brokerage and CGT. */
   liquidationValue(gainTax?: (taxableGain: number) => number): number {
-    const proceeds = this.value * (1 - this.feeRate);
-    const taxable = Math.max(0, proceeds - this.costBase) * this.taxableGainShare;
-    const tax = taxable > 0 ? (gainTax ? gainTax(taxable) : taxable * this.taxRate) : 0;
-    return proceeds - tax + this.cash;
+    return this.value * (1 - this.feeRate) - this.saleTax(gainTax) + this.cash;
   }
+}
+
+/**
+ * Month (counted from the start, 1 = the first month) the 2027 CGT rules begin for share
+ * holdings, or null under the old rules. Zero or less: already in force at the start.
+ */
+export function reformMonthOf(inv: Pick<InvestmentInputs, 'cgtRules' | 'monthsToReform'>): number | null {
+  if (inv.cgtRules === 'old') return null;
+  return inv.monthsToReform ?? monthsUntilReform(new Date());
 }
 
 export function runComparison(
@@ -212,12 +271,21 @@ export function runComparison(
   const startingCapital = propertyInputs.deposit + upfrontCosts + startingOffset;
   const loanAmount = Math.max(0, propertyInputs.propertyPrice - propertyInputs.deposit + (propertyInputs.lmi ?? 0));
 
-  const renter = new Portfolio(feeRate, marginalTaxRate);
-  const buyer = new Portfolio(feeRate, marginalTaxRate);
+  const reformMonth = reformMonthOf(investmentInputs);
+  const indexed = reformMonth !== null;
+  const renter = new Portfolio(feeRate, marginalTaxRate, CGT_DISCOUNT, indexed);
+  const buyer = new Portfolio(feeRate, marginalTaxRate, CGT_DISCOUNT, indexed);
   // Super funds pay no brokerage on members' contributions
   const renterSuper = new Portfolio(0, SUPER_EARNINGS_TAX, SUPER_TAXABLE_GAIN);
   const buyerSuper = new Portfolio(0, SUPER_EARNINGS_TAX, SUPER_TAXABLE_GAIN);
   renter.contribute(startingCapital);
+  // Judgment call: super funds keep their one-third discount (the reform targets individuals'
+  // investments; the explainer doesn't change the super fund rules), so they're never indexed
+  const shareHoldings = [renter, buyer];
+  const setShareCpi = (months: number) => {
+    for (const p of shareHoldings) p.cpi = Math.pow(1 + inflation, months / 12);
+  };
+  if (reformMonth !== null && reformMonth <= 0) shareHoldings.forEach((p) => p.startReform());
 
   let balance = loanAmount;
   let offset = startingOffset;
@@ -244,6 +312,9 @@ export function runComparison(
   let cumulativeOwnerMoves = 0;
   let buyerPension = 0;
   let renterPension = 0;
+  /** Pension received this year: recipients of means-tested payments skip the 30% minimum tax */
+  let buyerPensionYear = 0;
+  let renterPensionYear = 0;
 
   const results: YearlySnapshot[] = [];
 
@@ -255,6 +326,9 @@ export function runComparison(
     const age = startAge + year;
     // Liquidation uses this year-end's price level (snapshot 0 is today)
     const saleTax = shareSaleTax(year === 0 ? 1 : priceIndex * (1 + inflation));
+    setShareCpi(monthsElapsed);
+    buyer.floorExempt = buyerPensionYear > 0;
+    renter.floorExempt = renterPensionYear > 0;
     const buyerHoldings = buyer.holdingValue() + buyerSuper.holdingValue();
     const buyerAfterTax = buyer.liquidationValue(saleTax) + superAfterTax(buyerSuper, age);
     const renterHoldings = renter.holdingValue() + renterSuper.holdingValue();
@@ -331,6 +405,8 @@ export function runComparison(
 
     let mortgageAnnualCost = 0;
     let rentAnnualCost = 0;
+    buyerPensionYear = 0;
+    renterPensionYear = 0;
 
     // Owner moves at the start of the year: sell, then buy a home of the same value at full
     // (not first-home) stamp duty. The loan carries over unchanged.
@@ -375,6 +451,10 @@ export function runComparison(
     };
 
     for (let month = 1; month <= 12; month++) {
+      // Price level for indexing share cost bases; the 2027 rules start once `reformMonth`
+      // months have passed
+      setShareCpi(monthsElapsed);
+      if (monthsElapsed === reformMonth) shareHoldings.forEach((p) => p.startReform());
       let loanPayment = 0;
       if (balance > 0.005) {
         const interest = Math.max(0, balance - offset) * (currentInterestRate / 100 / 12);
@@ -417,6 +497,8 @@ export function runComparison(
         }) / 12;
         buyerPension += buyerIncome;
         renterPension += renterIncome;
+        buyerPensionYear += buyerIncome;
+        renterPensionYear += renterIncome;
       }
 
       // Both spend the same: whoever comes out ahead this month (lower housing costs, more

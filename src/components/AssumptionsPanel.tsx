@@ -312,6 +312,22 @@ export default function AssumptionsPanel({
             ))}
           </select>
         </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-[13px] text-ink-2">Capital gains tax on shares</span>
+          <select
+            className="input-field"
+            value={inv.cgtRules ?? 'reform'}
+            onChange={(e) => onInvestmentChange({ ...inv, cgtRules: e.target.value === 'old' ? 'old' : 'reform' })}
+          >
+            <option value="reform">From July 2027 (law)</option>
+            <option value="old">Old rules: 50% discount</option>
+          </select>
+          <span className="text-xs leading-snug text-muted">
+            {(inv.cgtRules ?? 'reform') === 'reform'
+              ? 'Gains after July 2027 are indexed to inflation and taxed in full, at least 30% (not for age pensioners). Gains before then keep the 50% discount. Your home stays tax-free.'
+              : 'For comparison: half of every share gain is taxed. Your home stays tax-free.'}
+          </span>
+        </label>
       </Section>
 
       <details className="group border-b border-line">

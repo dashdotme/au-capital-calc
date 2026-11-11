@@ -223,6 +223,7 @@ export const BUY_FIELDS: readonly Field[] = [
   ['spread-sale', 'investment.spreadSale', 'bool'],
   ['sale-years', 'investment.saleYears', 'num'],
   ['sale-income', 'investment.saleIncome', 'num'],
+  ['tax-rules', 'investment.cgtRules', 'text'],
   ['income', 'income', 'num'],
   ['scenarios', 'scenarioMode', 'bool'],
   ['todays-dollars', 'realTerms', 'bool'],
@@ -325,6 +326,8 @@ function validate(raw: Partial<SharedState>, defaults: SharedState): SharedState
       ...mergeTyped(defaults.investment, raw.investment),
       // A missing preset id means the shared values were customised
       portfolio: PORTFOLIOS.some((p) => p.id === raw.investment?.portfolio) ? raw.investment!.portfolio : undefined,
+      // Links made before the reform was modelled have no rules and get today's law
+      cgtRules: raw.investment?.cgtRules === 'old' ? 'old' : 'reform',
     },
     horizon,
     sellYear: isNumber(raw.sellYear) ? Math.max(1, Math.min(horizon, Math.round(raw.sellYear))) : null,

@@ -135,6 +135,7 @@ export default function PrintReport({ state, baseline, scenarios, sellYear, cros
     ['Fund fee / brokerage', `${inv.managementFee ?? 0}% / ${inv.stockTransactionCost}%`],
     ['Property growth', `${pct(inv.propertyGrowthRate)}${p.newHome ? ` (${NEW_HOME_GROWTH_DRAG} point lower for the first ${NEW_HOME_DRAG_YEARS} years: new home)` : ''}`],
     ['Tax rate (incl. Medicare)', `${inv.marginalTaxRate}%`],
+    ['CGT on shares', (inv.cgtRules ?? 'reform') === 'reform' ? 'From Jul 2027: indexed, 30% minimum' : 'Old rules: 50% discount'],
     ['Inflation', `${inv.inflationRate}%`],
     ['Horizon / sell after', `${state.horizon} / ${sellYear} years`],
     ['Dollar basis', state.realTerms ? "Today's dollars" : 'Future dollars'],

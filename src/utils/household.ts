@@ -13,7 +13,7 @@
 // just the difference, so filling the offset would pay the loan off with income the engine
 // never sees.)
 import type { InvestmentInputs, PropertyInputs, RentInputs } from '../types';
-import { Portfolio, calculateMortgagePayment, newHomeGrowthDrag, upfrontCostsOf, type RatePaths } from '../utils/calculations';
+import { Portfolio, calculateMortgagePayment, newHomeGrowthDrag, reformMonthOf, upfrontCostsOf, type RatePaths } from '../utils/calculations';
 import { moveStampDuty } from './stampDuty';
 
 export interface Household {
@@ -86,7 +86,9 @@ export function simulateHousehold(
   const startingCapital = property.deposit + upfront + (property.offsetAccountBalance ?? 0);
 
   // Buyer
-  const buyerShares = new Portfolio(feeRate, tax);
+  const reformMonth = reformMonthOf(investment);
+  const indexed = reformMonth !== null;
+  const buyerShares = new Portfolio(feeRate, tax, undefined, indexed);
   let offset = property.offsetAccountBalance ?? 0;
   let balance = Math.max(0, property.propertyPrice - property.deposit + (property.lmi ?? 0));
   let currentRate = Number.NaN;
@@ -102,8 +104,9 @@ export function simulateHousehold(
   let buyerMinBuffer = Infinity;
 
   // Renter
-  const renterShares = new Portfolio(feeRate, tax);
+  const renterShares = new Portfolio(feeRate, tax, undefined, indexed);
   renterShares.contribute(startingCapital);
+  if (reformMonth !== null && reformMonth <= 0) [buyerShares, renterShares].forEach((p) => p.startReform());
   let renterRentFactor = 1;
   let renterDebt = 0;
   let renterDownsizedMonth: number | null = null;
@@ -116,6 +119,7 @@ export function simulateHousehold(
   const buyerNetWorth: number[] = [];
   const renterNetWorth: number[] = [];
   const record = () => {
+    for (const p of [buyerShares, renterShares]) p.cpi = Math.pow(1 + inflation, month / 12);
     const sale = value * (property.sellingCostRate / 100);
     const home = owns ? value - sale - balance + offset : 0;
     buyerNetWorth.push(home + buyerShares.liquidationValue() - buyerDebt);
@@ -158,6 +162,10 @@ export function simulateHousehold(
       : 0;
 
     for (let m = 1; m <= 12; m++) {
+      // Price level for indexing share cost bases; the 2027 CGT rules start once `reformMonth`
+      // months have passed
+      for (const p of [buyerShares, renterShares]) p.cpi = Math.pow(1 + inflation, month / 12);
+      if (month === reformMonth) [buyerShares, renterShares].forEach((p) => p.startReform());
       month++;
       // Income this month, after any spell and permanent scarring
       let incomeShare = 1;

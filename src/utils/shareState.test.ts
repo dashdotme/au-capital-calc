@@ -52,6 +52,13 @@ describe('pages', () => {
 });
 
 describe('rent-or-buy links', () => {
+  it('writes the old CGT rules only when chosen, and ignores unknown rules', () => {
+    const old = { ...DEFAULT_STATE, investment: { ...DEFAULT_STATE.investment, cgtRules: 'old' as const } };
+    expect(encodeState(old)).toBe('tax-rules=old');
+    expect(decodeState('tax-rules=old')?.investment.cgtRules).toBe('old');
+    expect(decodeState('tax-rules=nonsense')?.investment.cgtRules).toBe('reform');
+  });
+
   it('writes nothing for the defaults', () => {
     expect(encodeState(DEFAULT_STATE)).toBe('');
   });

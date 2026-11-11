@@ -95,6 +95,14 @@ export interface InvestmentInputs {
   saleYears?: number;
   /** Other taxable income per person in each year of selling, today's dollars */
   saleIncome?: number;
+  /**
+   * Capital gains tax on shares: 'reform' (default) applies the 2027 rules from 1 Jul 2027
+   * (CPI indexation and a 30% minimum tax; gains before then keep the 50% discount), 'old'
+   * keeps the 50% discount throughout
+   */
+  cgtRules?: 'reform' | 'old';
+  /** Months from the start until 1 Jul 2027; defaults to counting from today */
+  monthsToReform?: number;
 }
 
 /**
