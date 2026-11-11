@@ -5,6 +5,7 @@ const ITEMS: { page: Page; detail: string }[] = [
   { page: 'buy', detail: 'Buy a home, or rent and invest the difference' },
   { page: 'invest', detail: 'An investment property, or a share fund' },
   { page: 'learn', detail: 'How house prices work over decades' },
+  { page: 'method', detail: 'Every assumption behind both calculators' },
 ];
 
 /** The page title, which opens a menu of the site's calculators. */

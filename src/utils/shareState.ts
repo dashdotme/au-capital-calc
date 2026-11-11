@@ -51,22 +51,29 @@ export const defaultInvestState = (): InvestState => ({
 
 // ---- Pages -------------------------------------------------------------------------------
 
-export type Page = 'buy' | 'invest' | 'learn';
+export type Page = 'buy' | 'invest' | 'learn' | 'method';
+/** Which calculator the How It Works page describes */
+export type GuideTab = 'buy' | 'invest';
 export type Mode = 'simple' | 'ledger' | 'squeeze';
 
-export const PAGE_SLUGS: Record<Page, string> = { buy: 'rent-or-buy', invest: 'property-or-shares', learn: 'learn' };
+export const PAGE_SLUGS: Record<Page, string> = { buy: 'rent-or-buy', invest: 'property-or-shares', learn: 'learn', method: 'how-it-works' };
 const SLUGS = new Map<string, Page>([
   ['rent-or-buy', 'buy'],
   ['buy', 'buy'],
   ['property-or-shares', 'invest'],
   ['invest', 'invest'],
   ['learn', 'learn'],
+  ['how-it-works', 'method'],
+  ['method', 'method'],
+  ['assumptions', 'method'],
 ]);
 const MODES = new Map<string, Mode>([['ledger', 'ledger'], ['squeeze', 'squeeze'], ['simple', 'simple']]);
 
 export interface ParsedHash {
   page: Page | null;
   mode: Mode | null;
+  /** On the How It Works page, the calculator named after the slash (#how-it-works/property-or-shares) */
+  guide: GuideTab | null;
   params: URLSearchParams;
   /** A link in the old #s=<base64> format */
   legacy: string | null;
@@ -74,14 +81,18 @@ export interface ParsedHash {
 
 export function parseHash(hash: string): ParsedHash {
   const raw = hash.replace(/^#\/?/, '');
-  if (raw.startsWith('s=')) return { page: 'buy', mode: null, params: new URLSearchParams(), legacy: raw };
+  if (raw.startsWith('s=')) return { page: 'buy', mode: null, guide: null, params: new URLSearchParams(), legacy: raw };
   const [path, query = ''] = raw.split('?', 2);
   const [slug = '', mode = ''] = path.toLowerCase().split('/');
-  return { page: SLUGS.get(slug) ?? null, mode: MODES.get(mode) ?? null, params: new URLSearchParams(query), legacy: null };
+  const page = SLUGS.get(slug) ?? null;
+  const section = SLUGS.get(mode);
+  const guide = page === 'method' && (section === 'buy' || section === 'invest') ? section : null;
+  return { page, mode: MODES.get(mode) ?? null, guide, params: new URLSearchParams(query), legacy: null };
 }
 
 /** The hash for a page, without "#"; empty for the plain rent-or-buy page with no changes. */
-export function buildHash(page: Page, mode: Mode, query: string): string {
+export function buildHash(page: Page, mode: Mode, query: string, guide: GuideTab = 'buy'): string {
+  if (page === 'method') return guide === 'invest' ? `${PAGE_SLUGS.method}/${PAGE_SLUGS.invest}` : PAGE_SLUGS.method;
   const showMode = page === 'learn' || mode === 'simple' || (mode === 'squeeze' && page !== 'buy') ? '' : `/${mode}`;
   const path = `${PAGE_SLUGS[page]}${showMode}`;
   if (page === 'buy' && !showMode && !query) return '';

@@ -89,7 +89,7 @@ export default function KeyFigures({
           />
         ) : (
           <Tile
-            label="Across 5,000 simulated futures"
+            label={`Across 5,000 simulated futures, after ${timeHorizon} years`}
             value={`${formatPercent(monteCarloBuyProbability)} buy`}
             note={<span className="underline">See the full risk picture →</span>}
           />

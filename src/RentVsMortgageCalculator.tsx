@@ -33,6 +33,7 @@ import InvestCalculator from './components/InvestCalculator';
 import Segmented from './components/Segmented';
 import PageMenu from './components/PageMenu';
 import HousingExplainer from './components/HousingExplainer';
+import ModelGuide from './components/ModelGuide';
 import SiteFooter from './components/SiteFooter';
 import PriceToIncomeCallout from './components/PriceToIncomeCallout';
 import { priceToIncome } from './utils/priceToIncome';
@@ -46,14 +47,14 @@ import PortfolioComparison from './components/PortfolioComparison';
 import { PORTFOLIOS, applyPortfolio } from './portfolios';
 import {
   DEFAULT_STATE, buildHash, decodeInvestState, decodeState, defaultInvestState, encodeInvestState, encodeState, parseHash,
-  type InvestState, type Mode, type Page, type SharedState,
+  type GuideTab, type InvestState, type Mode, type Page, type SharedState,
 } from './utils/shareState';
 import { withPurchaseCosts } from './utils/homeBuyerSupport';
 
 type View = Mode | 'risk';
 
 const VIEW_KEY = 'rent-or-buy.view';
-const PAGE_TITLES: Record<Page, string> = { buy: 'Rent or Buy', invest: 'Property or Shares', learn: 'The Long Run' };
+const PAGE_TITLES: Record<Page, string> = { buy: 'Rent or Buy', invest: 'Property or Shares', learn: 'The Long Run', method: 'How It Works' };
 /** Set once someone finds the AI Squeeze through the corner easter egg */
 const SQUEEZE_UNLOCKED_KEY = 'rent-or-buy.squeeze-unlocked';
 const THEME_KEY = 'rent-or-buy.theme';
@@ -172,6 +173,9 @@ export default function RentVsMortgageCalculator() {
   const [initial] = useState(() =>
     (link.page === 'buy' ? decodeState(window.location.hash, DEFAULT_STATE) : null) ?? DEFAULT_STATE);
   const [page, setPage] = useState<Page>(link.page ?? 'buy');
+  /** Which calculator the How It Works page describes: the one you came from */
+  const [guideTab, setGuideTab] = useState<GuideTab>(link.guide ?? 'buy');
+  const isCalculator = page === 'buy' || page === 'invest';
   const [investState, setInvestState] = useState<InvestState>(() =>
     link.page === 'invest' ? decodeInvestState(link.params) : defaultInvestState());
   const [propertyInputs, setPropertyInputs] = useState<PropertyInputs>(() => withPurchaseCosts(initial.property));
@@ -205,6 +209,7 @@ export default function RentVsMortgageCalculator() {
   );
 
   const switchPage = (next: Page) => {
+    if (next === 'method' && isCalculator) setGuideTab(page);
     setPage(next);
     setShowRisk(false);
     window.scrollTo({ top: 0 });
@@ -238,7 +243,7 @@ export default function RentVsMortgageCalculator() {
   };
   // The address bar always holds a link to what's on screen, readable and without defaults
   const query = page === 'buy' ? encodeState(currentState) : page === 'invest' ? encodeInvestState(investState) : '';
-  const hash = buildHash(page, mainView, query);
+  const hash = buildHash(page, mainView, query, guideTab);
   useEffect(() => {
     window.history.replaceState(null, '', hash ? `#${hash}` : window.location.pathname + window.location.search);
   }, [hash]);
@@ -506,7 +511,7 @@ export default function RentVsMortgageCalculator() {
 
   return (
     <ThemeContext.Provider value={theme}>
-      <div className={`min-h-screen bg-ground text-ink print:hidden ${view === 'ledger' && page !== 'learn' ? 'pb-24 lg:pb-0' : ''}`}>
+      <div className={`min-h-screen bg-ground text-ink print:hidden ${view === 'ledger' && isCalculator ? 'pb-24 lg:pb-0' : ''}`}>
         <header className="border-b border-line">
           <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
             <div className="flex min-h-11 items-center gap-3">
@@ -539,7 +544,7 @@ export default function RentVsMortgageCalculator() {
                 >
                   {monteCarloRunning ? 'Running…' : 'Re-run'}
                 </button>
-              ) : page !== 'learn' && (
+              ) : isCalculator && (
                 <Segmented
                   label="View"
                   value={page === 'invest' ? investView : mainView}
@@ -560,7 +565,7 @@ export default function RentVsMortgageCalculator() {
               >
                 {themeIcon}
               </button>
-              {page !== 'learn' && (
+              {isCalculator && (
               <button type="button" onClick={copyLink} aria-label={linkCopied ? 'Link copied' : 'Copy link to this scenario'}
                 className={`${iconButton} sm:w-auto sm:min-w-[7.25rem] sm:gap-2 sm:px-3 sm:text-[13px]`}>
                 {/* Wide enough for "Copy link", so switching to "Copied" doesn't shift the header */}
@@ -634,6 +639,16 @@ export default function RentVsMortgageCalculator() {
           <HousingExplainer onOpenInvest={() => switchPage('invest')} onOpenCalculator={() => switchPage('buy')} />
         )}
 
+        {page === 'method' && (
+          <ModelGuide
+            tab={guideTab}
+            onTabChange={setGuideTab}
+            buy={{ property: propertyInputs, rent: rentInputs, investment: investmentInputs, horizon: timeHorizon }}
+            ip={investState.ip}
+            onOpenCalculator={switchPage}
+          />
+        )}
+
         {page === 'buy' && view === 'squeeze' && (
           <SqueezeView
             property={propertyInputs}
@@ -686,6 +701,7 @@ export default function RentVsMortgageCalculator() {
                     rentInputs={rentInputs}
                     investmentInputs={investmentInputs}
                     timeHorizon={timeHorizon}
+                    realTerms={realTerms}
                     onClose={() => setFocusMetric(null)}
                   />
                 </div>

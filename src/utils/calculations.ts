@@ -166,7 +166,11 @@ export class Portfolio {
   private gains(): { discounted: number; real: number } {
     const proceeds = this.value * (1 - this.feeRate);
     if (!this.reformed) return { discounted: Math.max(0, proceeds - this.costBase) * this.taxableGainShare, real: 0 };
-    const real = proceeds - this.realCost * this.cpi;
+    // Indexation can wipe out a gain but not create a loss (as under the pre-1999 rules; a
+    // judgment call for the 2027 ones): below the indexed cost, only a fall below the
+    // unindexed cost counts
+    const indexedCost = this.realCost * this.cpi;
+    const real = proceeds >= indexedCost ? proceeds - indexedCost : Math.min(0, proceeds - this.costBase);
     const locked = this.lockedTaxable;
     if (locked < 0) return { discounted: 0, real: Math.max(0, real + locked / this.taxableGainShare) };
     if (real < 0) return { discounted: Math.max(0, locked + real * this.taxableGainShare), real: 0 };

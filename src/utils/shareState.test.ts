@@ -38,6 +38,8 @@ describe('pages', () => {
     expect(parseHash('#property-or-shares/ledger?price=700k')).toMatchObject({ page: 'invest', mode: 'ledger' });
     expect(parseHash('#invest').page).toBe('invest');
     expect(parseHash('#learn').page).toBe('learn');
+    expect(parseHash('#how-it-works')).toMatchObject({ page: 'method', guide: null });
+    expect(parseHash('#how-it-works/property-or-shares')).toMatchObject({ page: 'method', guide: 'invest' });
     expect(parseHash('#s=abc')).toMatchObject({ page: 'buy', legacy: 's=abc' });
     expect(parseHash('').page).toBeNull();
     expect(parseHash('#nonsense').page).toBeNull();
@@ -48,6 +50,8 @@ describe('pages', () => {
     expect(buildHash('buy', 'ledger', '')).toBe('rent-or-buy/ledger');
     expect(buildHash('invest', 'simple', 'price=700k')).toBe('property-or-shares?price=700k');
     expect(buildHash('learn', 'ledger', '')).toBe('learn');
+    expect(buildHash('method', 'ledger', '')).toBe('how-it-works');
+    expect(buildHash('method', 'simple', '', 'invest')).toBe('how-it-works/property-or-shares');
   });
 });
 

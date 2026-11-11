@@ -14,10 +14,10 @@ interface FocusAnalysisProps {
   rentInputs: RentInputs;
   investmentInputs: InvestmentInputs;
   timeHorizon: number;
+  /** Show figures in today's dollars, like the rest of the ledger */
+  realTerms: boolean;
   onClose: () => void;
 }
-
-const advantage = (s: YearlySnapshot) => s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale;
 
 export default function FocusAnalysis({
   metricKey,
@@ -25,8 +25,11 @@ export default function FocusAnalysis({
   rentInputs,
   investmentInputs,
   timeHorizon,
+  realTerms,
   onClose,
 }: FocusAnalysisProps) {
+  const deflator = (year: number) => (realTerms ? Math.pow(1 + investmentInputs.inflationRate / 100, year) : 1);
+  const advantage = (s: YearlySnapshot) => (s.rentNetPositionAfterTax - s.mortgageNetPositionAfterSale) / deflator(s.year);
   const wide = useMediaQuery('(min-width: 640px)');
   const { FOCUS_RAMP, INK, axisProps, gridProps, tooltipProps } = useChart();
   const baselineValue = getMetricValue(propertyInputs, rentInputs, investmentInputs, metricKey);

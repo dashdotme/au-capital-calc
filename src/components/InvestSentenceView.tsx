@@ -370,7 +370,7 @@ export default function InvestSentenceView({ f, levers, flash, onChange, onSellY
 function whyCards(f: InvestFigures, winner: 'property' | 'shares' | 'even') {
   const { input, result, sell, years } = f;
   const upToSell = years.filter((y) => y.year <= sell);
-  const taxSaved = -upToSell.reduce((sum, y) => sum + Math.min(0, y.taxDifference), 0);
+  const taxSaved = -upToSell.reduce((sum, y) => sum + Math.min(0, y.rentalTax), 0);
   const peakCarried = Math.max(0, ...upToSell.map((y) => y.carriedLoss));
   const frictions = result.stampDuty + input.purchaseCosts + f.sellingCosts;
   const cards: { figure: string; text: string }[] = [];

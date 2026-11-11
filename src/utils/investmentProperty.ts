@@ -16,6 +16,13 @@
 //     investor here is working when they sell).
 // - Capital works (Div 43): 2.5% a year of construction cost for homes built after 15 Sep 1987,
 //   and it reduces the cost base (ATO, "Rental properties – capital works").
+// - Fittings (plant) are depreciating assets outside CGT: on sale they are taken to fetch their
+//   written-down value, so what was written off comes off the property's cost base too.
+// - Judgment calls on how the 2027 rules treat the cost base, which the explainer doesn't spell
+//   out: what was spent buying is indexed from purchase; deductions claimed (capital works,
+//   fittings) come off at the dollar amount claimed, not indexed; for a property held across
+//   1 Jul 2027, deductions and holding costs after that date belong to the indexed part; and
+//   indexation can reduce a gain to nil but not create a loss, as under the pre-1999 rules.
 // - Second-hand plant and equipment in residential rentals bought since 9 May 2017 can't be
 //   depreciated (ATO), so only new builds get plant depreciation.
 // - Holding costs while land is vacant (here, during construction: interest, council rates and
@@ -113,6 +120,8 @@ export interface IpYear {
   taxableRental: number;
   /** Extra tax the property investor paid this year compared with the shares investor (negative: less) */
   taxDifference: number;
+  /** Tax on the rental's profit or loss alone, on top of the salary (negative: a saving) */
+  rentalTax: number;
   /** Quarantined rental losses waiting to be used */
   carriedLoss: number;
   sharesValue: number;
@@ -136,6 +145,11 @@ export interface IpResult {
   years: IpYear[];
 }
 
+/**
+ * Longest interest-only period: lenders renew 5-year terms to 10–15 years in total (CBA,
+ * Westpac and ANZ pages, read 7 Nov 2026), and the loan still has to be repaid within 30
+ */
+export const MAX_IO_YEARS = 15;
 /** 2.5% capital works rate (ATO) */
 const CAPITAL_WORKS_RATE = 0.025;
 /** Rough: average effective life of a new rental's fittings, for diminishing value (rate 2 ÷ life) */
@@ -163,6 +177,11 @@ export function capitalGainTax(otherIncome: number, discounted: number, real: nu
 function applyLoss(discounted: number, real: number, loss: number): [number, number] {
   const fromReal = Math.min(real, loss);
   return [Math.max(0, discounted - (loss - fromReal)), real - fromReal];
+}
+
+/** Gain over an indexed cost; below it, a loss only as far as the sale falls short of the unindexed cost. */
+function indexedGain(proceeds: number, cost: number, indexedCost: number): number {
+  return proceeds >= indexedCost ? proceeds - indexedCost : Math.min(0, proceeds - cost);
 }
 
 interface Parcel {
@@ -206,7 +225,7 @@ class Etf {
     let real = 0;
     for (const p of this.parcels) {
       if (p.preReform) discounted += 0.5 * (p.value - p.cost);
-      else real += p.value - (p.cost * cpi) / p.cpi;
+      else real += indexedGain(p.value, p.cost, (p.cost * cpi) / p.cpi);
     }
     // Losses on one part offset gains on the other, before the discount (roughly)
     if (discounted < 0) return [0, Math.max(0, real + 2 * discounted)];
@@ -240,7 +259,8 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
   const reformed = (month: number) => month >= reformMonth;
 
   // Negative gearing: new builds always; established homes bought after the announcement only until 1 Jul 2027
-  const quarantined = (month: number) => !isNew && input.rules === 'reform' && reformed(month);
+  // (month `reformMonth` is the last one before 1 Jul 2027)
+  const quarantined = (month: number) => !isNew && input.rules === 'reform' && month > reformMonth;
 
   const sharesOnly = new Etf();
   const side = new Etf();
@@ -250,12 +270,13 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
   const monthlyEtf = Math.pow(1 + (input.etfReturn - input.etfFee) / 100, 1 / 12);
   const monthlyGrowth = (month: number) =>
     Math.pow(1 + (input.growth - (isNew && month <= NEW_HOME_DRAG_YEARS * 12 ? NEW_HOME_GROWTH_DRAG : 0)) / 100, 1 / 12);
-  const ioMonths = Math.max(0, Math.round(input.ioYears * 12));
+  const ioMonths = Math.round(Math.min(MAX_IO_YEARS, Math.max(0, input.ioYears)) * 12);
   const TERM_MONTHS = 30 * 12; // the standard Australian loan term
   const monthlyCpi = Math.pow(1 + input.inflation / 100, 1 / 12);
   const etfYield = input.etfYield / 100;
   const frankingShare = input.franking / 100;
-  const capitalWorksBase = isNew ? building : input.capitalWorksBase;
+  // A new build's fittings are depreciated as plant, so they aren't also capital works
+  const capitalWorksBase = isNew ? Math.max(0, building - input.plant) : input.capitalWorksBase;
 
   let value = price;
   let cpi = 1;
@@ -264,12 +285,18 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
   let payment = 0;
   let rent = 0;
   let plantLeft = isNew ? input.plant : 0;
-  let capitalWorksClaimed = 0;
+  /** Capital works and fittings deductions so far; they come off the cost base */
+  let claimed = 0;
   let holdingCosts = 0;
+  /** Month the home was first let; rent rises on its anniversaries */
+  let firstLetMonth = 0;
   let yearLandTax = 0;
   let carriedLoss = 0;
   let valueAtReform: number | null = reformed(0) ? null : price;
   let cpiAtReform = 1;
+  let costBaseAtReform = 0;
+  let claimedAtReform = 0;
+  let holdingAtReform = 0;
 
   // Year accumulators
   let deductible = 0;
@@ -298,7 +325,12 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
     // Assessed once a year on the land's value then
     if (m % 12 === 1) yearLandTax = landTax(input.state, value * landShare, value / price, cpi);
     const councilAndLandTax = (input.councilRates * cpi + yearLandTax) / 12;
-    if (complete && rent === 0) rent = (input.grossYield / 100) * value / 12;
+    if (complete && firstLetMonth === 0) {
+      rent = (input.grossYield / 100) * value / 12;
+      firstLetMonth = m;
+    } else if (complete && (m - firstLetMonth) % 12 === 0) {
+      rent *= 1 + input.rentGrowth / 100;
+    }
     const collected = complete ? rent * (1 - input.vacancy / 100) : 0;
     const expenses = complete
       ? collected * (input.management / 100) +
@@ -313,7 +345,7 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
       const capitalWorks = (capitalWorksBase * CAPITAL_WORKS_RATE) / 12;
       const plant = (plantLeft * (2 / PLANT_LIFE)) / 12;
       plantLeft -= plant;
-      capitalWorksClaimed += capitalWorks;
+      claimed += capitalWorks + plant;
       const net = collected - expenses - interest - capitalWorks - plant;
       if (quarantined(m)) quarantinedNet += net;
       else deductible += net;
@@ -342,6 +374,9 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
       side.reformReset(cpi);
       valueAtReform = value;
       cpiAtReform = cpi;
+      costBaseAtReform = price + stampDuty + input.purchaseCosts + holdingCosts - claimed;
+      claimedAtReform = claimed;
+      holdingAtReform = holdingCosts;
     }
 
     if (m % 12 === 0) {
@@ -364,7 +399,8 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
 
       // Liquidation if sold now, on top of this year's salary
       const proceeds = value * (1 - input.sellingCosts / 100);
-      const costBase = price + stampDuty + input.purchaseCosts + holdingCosts - capitalWorksClaimed;
+      const spent = price + stampDuty + input.purchaseCosts + holdingCosts;
+      const costBase = spent - claimed;
       const [sideD, sideR] = side.gains(cpi, input.rules);
       const propertyOptions: { method: IpYear['cgtMethod']; d: number; r: number }[] = [];
       const nominal = proceeds - costBase;
@@ -373,13 +409,16 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
       } else {
         if (valueAtReform !== null) {
           // Bought before 1 Jul 2027: discount on the gain to then, indexation after
-          const pre = valueAtReform - costBase;
-          const post = proceeds - (valueAtReform * cpi) / cpiAtReform;
+          // The value then, plus later holding costs, less deductions claimed since
+          const base = valueAtReform + holdingCosts - holdingAtReform;
+          const claimedSince = claimed - claimedAtReform;
+          const pre = valueAtReform - costBaseAtReform;
+          const post = indexedGain(proceeds, base - claimedSince, (base * cpi) / cpiAtReform - claimedSince);
           const d = pre >= 0 ? 0.5 * Math.max(0, pre + Math.min(0, post)) : 0;
           const r = pre >= 0 ? Math.max(0, post) : Math.max(0, post + pre);
           propertyOptions.push({ method: 'split', d, r });
         } else {
-          propertyOptions.push({ method: 'indexation', d: 0, r: Math.max(0, proceeds - costBase * cpi) });
+          propertyOptions.push({ method: 'indexation', d: 0, r: Math.max(0, proceeds - (spent * cpi - claimed)) });
         }
         if (isNew) propertyOptions.push({ method: 'discount', d: Math.max(0, 0.5 * nominal), r: 0 });
       }
@@ -402,6 +441,7 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
         cashFlow: yearCash,
         taxableRental: deductible,
         taxDifference: taxB - taxA,
+        rentalTax: taxAt(salary + deductible, cpi) - base,
         carriedLoss,
         sharesValue: sharesOnly.value,
         sideSharesValue: side.value,
@@ -419,7 +459,6 @@ export function runInvestmentProperty(input: IpInputs): IpResult {
       yearCash = 0;
       dist.a = dist.aCredits = dist.b = dist.bCredits = 0;
       salary *= 1 + input.salaryGrowth / 100;
-      rent *= 1 + input.rentGrowth / 100;
     }
   }
 

@@ -4,7 +4,7 @@
 // the identities over seeded random scenarios so they are tested away from hand-picked inputs.
 import { describe, expect, it } from 'vitest';
 import type { InvestmentInputs, PropertyInputs, RentInputs, YearlySnapshot } from '../types';
-import { calculateMortgagePayment, runComparison, toRealTerms, upfrontCostsOf, type RatePaths } from './calculations';
+import { Portfolio, calculateMortgagePayment, runComparison, toRealTerms, upfrontCostsOf, type RatePaths } from './calculations';
 import { createRng } from './distributions';
 import { explainGap, offsetOf } from './gap';
 import { AU_STATES } from './stampDuty';
@@ -175,6 +175,19 @@ describe('closed-form oracles', () => {
     const atReform = 180000 * 1.07 ** 2;
     const tax = 0.45 * (0.5 * (atReform - 180000) + value - atReform * 1.025 ** 13);
     expect(run(45, 24).rentNetPositionAfterTax).toBeCloseTo(value - tax, 4);
+  });
+
+  it('lets indexation wipe out a gain but not create a loss', () => {
+    // $100k grows 10% a year for 2 years before the reform, then 2% a year against 3% inflation
+    const p = new Portfolio(0, 0.45, 0.5, true);
+    p.buy(100000);
+    for (let m = 0; m < 24; m++) p.grow(0.1, 0, 0, true);
+    p.cpi = 1.03 ** 2;
+    p.startReform();
+    for (let m = 0; m < 120; m++) p.grow(0.02, 0, 0, true);
+    p.cpi = 1.03 ** 12;
+    // The later gain is below inflation, so only the locked pre-reform gain is taxed, in full
+    expect(p.liquidationValue()).toBeCloseTo(p.value - 0.45 * 0.5 * (121000 - 100000), 4);
   });
 
   it('exempts age pensioners from the 30% minimum tax', () => {

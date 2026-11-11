@@ -111,7 +111,9 @@ export default function LedgerTable({
           <h1 className="m-0 text-2xl font-bold tracking-tight sm:text-3xl">
             The books, if you sell after <span className="font-mono font-medium">{sellYear}</span> {sellYear === 1 ? 'year' : 'years'}
           </h1>
-          <span className="text-sm text-muted">{realTerms ? "Today's dollars" : 'Future dollars'}</span>
+          <span className="text-sm text-muted" title={realTerms ? "Every line is converted at the sell year's price level, so the lines add up. Amounts paid in earlier years therefore read smaller than they were at the time." : undefined}>
+            {realTerms ? "Today's dollars, converted at the sell year" : 'Future dollars'}
+          </span>
         </div>
         <label className="flex items-center gap-4">
           <span className="sr-only">Sell after</span>

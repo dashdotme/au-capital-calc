@@ -180,3 +180,53 @@ describe('horizon', () => {
     expect(long).toEqual(short);
   });
 });
+
+describe('audit fixes', () => {
+  it('first raises the rent 12 months after the home is let, not at the first year-end', () => {
+    // Let from month 10: three months of the first rent in year 1, then nine more before the rise
+    const flat = { ...base, vacancy: 0, growth: 0, rentGrowth: 10 };
+    const [y1, y2] = runInvestmentProperty({ ...flat, buildMonths: 9 }).years;
+    const monthly = y1.rent / 3;
+    expect(y2.rent).toBeCloseTo(monthly * 9 + monthly * 1.1 * 3, 4);
+    // So finishing a month sooner or later barely changes the second year's rent
+    const year2 = (buildMonths: number) => runInvestmentProperty({ ...base, buildMonths }).years[1].rent;
+    expect(Math.abs(year2(11) - year2(12)) / year2(12)).toBeLessThan(0.01);
+  });
+
+  it('adds fittings written off back into the gain when the property is sold', () => {
+    const cgt = (plant: number) => runInvestmentProperty({ ...base, rules: 'old', years: 10, plant }).years[9].propertyCgt;
+    expect(cgt(30000)).toBeGreaterThan(cgt(0));
+  });
+
+  it('does not claim capital works on the fittings as well', () => {
+    // Year 1 of an old-rules new build, let from the start: deductions are 2.5% of the building less the fittings,
+    // plus the fittings' own write-off, so moving $1 from building to fittings changes
+    // taxable rent by its plant rate less 2.5%, never by both on the same dollar
+    const taxable = (plant: number) => runInvestmentProperty({ ...base, rules: 'old', buildMonths: 0, plant }).years[0].taxableRental;
+    // First-year plant write-off at 25% diminishing value, monthly: 1 − (1 − 0.25/12)^12
+    const plantRate = 1 - (1 - 0.25 / 12) ** 12;
+    expect(taxable(0) - taxable(20000)).toBeCloseTo(20000 * (plantRate - 0.025), 4);
+  });
+
+  it('keeps deductions claimed after 1 July 2027 out of the discounted part of the gain', () => {
+    // Buying a month before the reform or on the day should give similar results; lumping all
+    // capital works into the pre-reform gain made a $70k cliff here
+    const lead = (monthsToReform: number) => {
+      const y = last({ ...base, monthsToReform });
+      return y.propertyNet - y.sharesNet;
+    };
+    expect(Math.abs(lead(1) - lead(0))).toBeLessThan(20000);
+  });
+
+  it('starts quarantining losses in the month after the reform, not the month of it', () => {
+    const y1 = runInvestmentProperty({ ...base, kind: 'established', monthsToReform: 12 }).years[0];
+    expect(y1.carriedLoss).toBe(0);
+  });
+
+  it('reports the tax on the rental alone, without the share investor\'s distributions', () => {
+    const y = runInvestmentProperty({ ...base, etfYield: 0 }).years[2];
+    expect(y.rentalTax).toBeCloseTo(y.taxDifference, 6);
+    const withYield = runInvestmentProperty(base).years[2];
+    expect(withYield.rentalTax).toBeCloseTo(y.rentalTax, 6);
+  });
+});

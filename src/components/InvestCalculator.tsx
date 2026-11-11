@@ -9,7 +9,7 @@ import InvestSentenceView, { type Lever } from './InvestSentenceView';
 import Segmented from './Segmented';
 
 const MONEY_FIELDS = [
-  'propertyValue', 'loanBalance', 'rent', 'cashFlow', 'taxableRental', 'taxDifference', 'carriedLoss',
+  'propertyValue', 'loanBalance', 'rent', 'cashFlow', 'taxableRental', 'taxDifference', 'rentalTax', 'carriedLoss',
   'sharesValue', 'sideSharesValue', 'propertyNet', 'sharesNet', 'propertyCgt', 'sideSharesCgt', 'sharesCgt',
 ] as const;
 
@@ -194,9 +194,9 @@ export function LeavesOut({ lvr, open = false }: { lvr: number; open?: boolean }
           second owner lose negative gearing and the discount, which may weigh on their resale value; that isn't modelled either.
         </p>
         <p>
-          <strong className="font-semibold text-ink">Costs.</strong> Land tax is a flat input: most states charge none on a single
-          cheaper lot, but it climbs fast with a second property. No lenders mortgage insurance above 80%, no rate rises, and no
-          special levies or major repairs.
+          <strong className="font-semibold text-ink">Costs.</strong> Land tax assumes this is your only investment land; a second
+          property shares the threshold and pays much more. Mortgage insurance above 80% is a rough estimate. No rate rises, and
+          no special levies or major repairs.
         </p>
         <p>
           <strong className="font-semibold text-ink">Sources.</strong> The 2027 rules are from the ATO and the Budget 2026–27 tax
@@ -344,7 +344,7 @@ export default function InvestCalculator({ state, onChange, view, onOpenLearn }:
     otherRules: toDisplay(extras.otherRules, sell),
     band: years.map((y, i) => ({ low: toDisplay(extras.low[i] ?? 0, y.year), high: toDisplay(extras.high[i] ?? 0, y.year) })),
     monthlyBefore: firstLet.cashFlow / 12,
-    monthlyAfter: (firstLet.cashFlow - firstLet.taxDifference) / 12,
+    monthlyAfter: (firstLet.cashFlow - firstLet.rentalTax) / 12,
     outOfPocket: upToSell.reduce((sum, y) => sum + Math.max(0, -y.cashFlow), 0),
     rentCollected: upToSell.reduce((sum, y) => sum + y.rent, 0),
     sellingCosts: final.propertyValue * (input.sellingCosts / 100),

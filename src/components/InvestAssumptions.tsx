@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { IpInputs } from '../utils/investmentProperty';
+import { MAX_IO_YEARS, type IpInputs } from '../utils/investmentProperty';
 import { AU_STATES, isAuState } from '../utils/stampDuty';
 import { IP_SHARE_PRESETS, ipPortfolio, ipPortfolioFields } from '../utils/shareState';
 import InputField from './InputField';
@@ -63,8 +63,8 @@ export default function InvestAssumptions({ input, onChange, onReset }: {
         <InputField label="Loan" format="percent" value={input.lvr} onChange={(lvr) => set({ lvr: Math.max(0, Math.min(100, lvr)) })} helpText="Of the price." />
         <InputField label="Interest rate" format="percent" value={input.interestRate} onChange={(interestRate) => set({ interestRate })} />
         <InputField label="Interest-only years" format="years" value={input.ioYears}
-          onChange={(ioYears) => set({ ioYears: Math.max(0, Math.min(30, Math.round(ioYears))) })}
-          helpText="Then principal and interest; 0 for P&I." />
+          onChange={(ioYears) => set({ ioYears: Math.max(0, Math.min(MAX_IO_YEARS, Math.round(ioYears))) })}
+          helpText={`Then principal and interest; 0 for P&I. Up to ${MAX_IO_YEARS}.`} />
         <InputField label="Price growth" format="percent" value={input.growth} onChange={(growth) => set({ growth })} helpText="A year." />
         <InputField label="Gross yield" format="percent" value={input.grossYield} onChange={(grossYield) => set({ grossYield })} helpText="Rent ÷ value." />
         <InputField label="Rent growth" format="percent" value={input.rentGrowth} onChange={(rentGrowth) => set({ rentGrowth })} helpText="A year." />

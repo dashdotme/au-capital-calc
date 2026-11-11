@@ -170,8 +170,8 @@ export const DEFAULT_IP: IpInputs = {
   capitalWorksBase: 0,
   // Rough: carpets, blinds, appliances, hot water and air conditioning. Quantity surveyors put a
   // new house's first-year claim at $12–15.5k (BMT; Washington Brown: about $13k on a $500k
-  // house); capital works on a $390k building is $9.8k, leaving about $4k of fittings in year one,
-  // a quarter of $16k at the diminishing value rate.
+  // house); capital works on the $375k of building that isn't fittings is $9.4k, leaving about
+  // $4k of fittings in year one, a quarter of $16k at the diminishing value rate.
   plant: 16000,
   // Conveyancing ~$1.5k, inspections ~$500, loan fees ~$400 (Openagent, 2024), transfer
   // registration on the land ~$1.7k and the mortgage $248 (Titles Queensland fees, 2026–27)
